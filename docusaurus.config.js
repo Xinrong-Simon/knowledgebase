@@ -10,7 +10,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'ZXR KnowledgeBase',
+  title: 'ZXR知识库',
   tagline: '个人知识库 · 记录所思所学',
   favicon: 'img/favicon.ico',
 
@@ -77,9 +77,9 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
-        title: 'ZXR KnowledgeBase',
+        title: 'ZXR知识库',
         logo: {
-          alt: 'ZXR KnowledgeBase Logo',
+          alt: 'ZXR知识库 Logo',
           src: 'img/logo.svg',
         },
         items: [
