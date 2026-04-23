@@ -36,6 +36,26 @@ const config = {
     locales: ['en'],
   },
 
+  plugins: [
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'current-affairs',
+        routeBasePath: 'current-affairs',
+        path: './current-affairs',
+        showReadingTime: true,
+        feedOptions: {
+          type: ['rss', 'atom'],
+          xslt: true,
+        },
+        editUrl: 'https://github.com/Xinrong-Simon/knowledgebase/edit/main/',
+        onInlineTags: 'warn',
+        onInlineAuthors: 'warn',
+        onUntruncatedBlogPosts: 'warn',
+      },
+    ],
+  ],
+
   presets: [
     [
       'classic',
@@ -90,6 +110,7 @@ const config = {
             label: '知识库',
           },
           {to: '/blog', label: '随笔', position: 'left'},
+          {to: '/current-affairs', label: '时事分析', position: 'left'},
           {
             href: 'https://github.com/Xinrong-Simon/knowledgebase',
             label: 'GitHub',
@@ -104,8 +125,8 @@ const config = {
             title: '知识库',
             items: [
               {
-                label: '开始阅读',
-                to: '/docs/intro',
+                label: '投资研究',
+                to: '/docs/investment-research/finland-startups-2025',
               },
             ],
           },
@@ -115,6 +136,10 @@ const config = {
               {
                 label: '随笔',
                 to: '/blog',
+              },
+              {
+                label: '时事分析',
+                to: '/current-affairs',
               },
               {
                 label: 'GitHub',
