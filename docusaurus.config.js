@@ -111,6 +111,7 @@ const config = {
           },
           {to: '/blog', label: '随笔', position: 'left'},
           {to: '/current-affairs', label: '时事分析', position: 'left'},
+          {to: '/games', label: '游戏', position: 'left'},
           {
             href: 'https://github.com/Xinrong-Simon/knowledgebase',
             label: 'GitHub',
@@ -140,6 +141,10 @@ const config = {
               {
                 label: '时事分析',
                 to: '/current-affairs',
+              },
+              {
+                label: '游戏',
+                to: '/games',
               },
               {
                 label: 'GitHub',

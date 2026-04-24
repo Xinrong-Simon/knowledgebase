@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>ZXR 俄罗斯方块</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1b2a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+    user-select: none;
+  }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 14px;
+    color: #e94560;
+    letter-spacing: 4px;
+    text-shadow: 0 0 12px #e9456088;
+  }
+  #game-container {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+  #board-canvas {
+    border: 2px solid #e94560;
+    box-shadow: 0 0 24px #e9456055;
+    display: block;
+  }
+  #side-panel {
+    width: 130px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .box {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .box-label {
+    font-size: 0.62rem;
+    color: #778;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .box-value {
+    font-size: 1.4rem;
+    color: #e94560;
+    font-weight: bold;
+  }
+  #next-canvas { display: block; margin: 4px auto 0; }
+  #status {
+    font-size: 0.75rem;
+    color: #aaa;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #zxr-mode {
+    display: none;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #ffd700;
+    border: 1px solid #ffd700;
+    border-radius: 6px;
+    padding: 5px;
+    animation: glow 0.6s infinite alternate;
+  }
+  #zxr-mode.on { display: block; }
+  @keyframes glow {
+    from { box-shadow: 0 0 4px #ffd700; }
+    to   { box-shadow: 0 0 14px #ffd700; }
+  }
+  #controls {
+    font-size: 0.65rem;
+    color: #556;
+    line-height: 2;
+  }
+</style>
+</head>
+<body>
+<h1>ZXR TETRIS</h1>
+<div id="game-container">
+  <canvas id="board-canvas" width="300" height="600"></canvas>
+  <div id="side-panel">
+    <div class="box">
+      <div class="box-label">下一个</div>
+      <canvas id="next-canvas" width="100" height="80"></canvas>
+    </div>
+    <div class="box">
+      <div class="box-label">分数</div>
+      <div class="value" id="v-score">0</div>
+    </div>
+    <div class="box">
+      <div class="box-label">等级</div>
+      <div class="value" id="v-level">1</div>
+    </div>
+    <div class="box">
+      <div class="box-label">消行</div>
+      <div class="value" id="v-lines">0</div>
+    </div>
+    <div class="box">
+      <div class="box-label">连续</div>
+      <div class="value" id="v-combo">0</div>
+    </div>
+    <div id="zxr-mode">★ ZXR 模式</div>
+    <div id="status">按空格开始</div>
+    <div id="controls">
+      ← → &nbsp;移动<br>
+      ↑ &nbsp;&nbsp;&nbsp;&nbsp;旋转<br>
+      ↓ &nbsp;&nbsp;&nbsp;&nbsp;加速<br>
+      空格 &nbsp;硬降<br>
+      P &nbsp;&nbsp;&nbsp;&nbsp;暂停
+    </div>
+  </div>
+</div>
+
+<script>
+const B = 30, COLS = 10, ROWS = 20;
+const bc = document.getElementById('board-canvas');
+const ctx = bc.getContext('2d');
+const nc = document.getElementById('next-canvas');
+const nCtx = nc.getContext('2d');
+
+const PIECES = [
+  { shape: [[1,1,1,1]],         color: '#00cfcf' },
+  { shape: [[1,1],[1,1]],       color: '#cfcf00' },
+  { shape: [[0,1,0],[1,1,1]],   color: '#9a00cf' },
+  { shape: [[0,1,1],[1,1,0]],   color: '#00cf00' },
+  { shape: [[1,1,0],[0,1,1]],   color: '#cf0000' },
+  { shape: [[1,0,0],[1,1,1]],   color: '#0050cf' },
+  { shape: [[0,0,1],[1,1,1]],   color: '#cf6f00' },
+];
+
+let board, score, linesCleared, level, consecutive;
+let current, nextPiece, dropTimer, dropMs;
+let running, paused, over;
+
+function newBoard() {
+  return Array.from({length: ROWS}, () => Array(COLS).fill(null));
+}
+
+function randPiece() {
+  const p = PIECES[Math.floor(Math.random() * PIECES.length)];
+  return { shape: p.shape.map(r => [...r]), color: p.color };
+}
+
+function spawnCurrent() {
+  const p = nextPiece;
+  nextPiece = randPiece();
+  current = {
+    shape: p.shape.map(r => [...r]),
+    color: p.color,
+    x: Math.floor((COLS - p.shape[0].length) / 2),
+    y: 0,
+    zxr: consecutive >= 3,
+  };
+  if (collides(0, 0)) {
+    over = true;
+    running = false;
+    clearInterval(dropTimer);
+    setStatus('游戏结束！空格重新开始');
+  }
+}
+
+function collides(dx, dy, shape) {
+  const s = shape || current.shape;
+  for (let r = 0; r < s.length; r++) {
+    for (let c = 0; c < s[r].length; c++) {
+      if (!s[r][c]) continue;
+      const nx = current.x + c + dx;
+      const ny = current.y + r + dy;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function rotate(shape) {
+  const rows = shape.length, cols = shape[0].length;
+  const res = Array.from({length: cols}, () => Array(rows).fill(0));
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      res[c][rows - 1 - r] = shape[r][c];
+  return res;
+}
+
+function lock() {
+  for (let r = 0; r < current.shape.length; r++) {
+    for (let c = 0; c < current.shape[r].length; c++) {
+      if (!current.shape[r][c]) continue;
+      const row = current.y + r, col = current.x + c;
+      if (row >= 0) board[row][col] = { color: current.color, zxr: current.zxr };
+    }
+  }
+
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; ) {
+    if (board[r].every(cell => cell !== null)) {
+      board.splice(r, 1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++;
+    } else {
+      r--;
+    }
+  }
+
+  if (cleared > 0) {
+    consecutive = 0;
+    const pts = [0, 100, 300, 500, 800][Math.min(cleared, 4)];
+    score += pts * level;
+    linesCleared += cleared;
+    level = Math.floor(linesCleared / 10) + 1;
+    dropMs = Math.max(80, 1000 - (level - 1) * 90);
+    restartDrop();
+  } else {
+    consecutive++;
+  }
+
+  updateHUD();
+  spawnCurrent();
+}
+
+function ghostY() {
+  let dy = 0;
+  while (!collides(0, dy + 1)) dy++;
+  return current.y + dy;
+}
+
+function moveDown() {
+  if (!collides(0, 1)) current.y++;
+  else lock();
+}
+
+function hardDrop() {
+  while (!collides(0, 1)) current.y++;
+  lock();
+}
+
+function tryRotate() {
+  const r = rotate(current.shape);
+  if (!collides(0, 0, r)) { current.shape = r; return; }
+  if (!collides(1, 0, r))  { current.shape = r; current.x++; return; }
+  if (!collides(-1, 0, r)) { current.shape = r; current.x--; return; }
+  if (!collides(2, 0, r))  { current.shape = r; current.x += 2; return; }
+  if (!collides(-2, 0, r)) { current.shape = r; current.x -= 2; return; }
+}
+
+// ── Drawing ──────────────────────────────────────────────
+
+function drawBlock(c2d, px, py, color, zxr, size) {
+  size = size || B;
+  c2d.fillStyle = color;
+  c2d.fillRect(px + 1, py + 1, size - 2, size - 2);
+  // highlight top/left
+  c2d.fillStyle = 'rgba(255,255,255,0.28)';
+  c2d.fillRect(px + 1, py + 1, size - 2, 3);
+  c2d.fillRect(px + 1, py + 1, 3, size - 2);
+  // shadow bottom/right
+  c2d.fillStyle = 'rgba(0,0,0,0.35)';
+  c2d.fillRect(px + size - 4, py + 1, 3, size - 2);
+  c2d.fillRect(px + 1, py + size - 4, size - 2, 3);
+
+  if (zxr) {
+    const fs = Math.max(7, Math.floor(size * 0.33));
+    c2d.save();
+    c2d.fillStyle = '#fff';
+    c2d.font = `bold ${fs}px monospace`;
+    c2d.textAlign = 'center';
+    c2d.textBaseline = 'middle';
+    // subtle shadow for readability
+    c2d.shadowColor = 'rgba(0,0,0,0.7)';
+    c2d.shadowBlur = 2;
+    c2d.fillText('ZXR', px + size / 2, py + size / 2);
+    c2d.restore();
+  }
+}
+
+function render() {
+  // background
+  ctx.fillStyle = '#0a1525';
+  ctx.fillRect(0, 0, bc.width, bc.height);
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(0, r * B); ctx.lineTo(COLS * B, r * B); ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(c * B, 0); ctx.lineTo(c * B, ROWS * B); ctx.stroke();
+  }
+
+  // placed blocks
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = board[r][c];
+      if (cell) drawBlock(ctx, c * B, r * B, cell.color, cell.zxr);
+    }
+  }
+
+  if (current && !over) {
+    // ghost
+    const gy = ghostY();
+    ctx.globalAlpha = 0.18;
+    for (let r = 0; r < current.shape.length; r++) {
+      for (let c = 0; c < current.shape[r].length; c++) {
+        if (!current.shape[r][c]) continue;
+        ctx.fillStyle = current.color;
+        ctx.fillRect((current.x + c) * B + 1, (gy + r) * B + 1, B - 2, B - 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // active piece
+    for (let r = 0; r < current.shape.length; r++) {
+      for (let c = 0; c < current.shape[r].length; c++) {
+        if (!current.shape[r][c]) continue;
+        drawBlock(ctx, (current.x + c) * B, (current.y + r) * B, current.color, current.zxr);
+      }
+    }
+  }
+
+  // overlay
+  if (over) {
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(0, 0, bc.width, bc.height);
+    ctx.fillStyle = '#e94560';
+    ctx.font = 'bold 30px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GAME OVER', bc.width / 2, bc.height / 2 - 22);
+    ctx.fillStyle = '#eee';
+    ctx.font = '16px monospace';
+    ctx.fillText('分数 ' + score, bc.width / 2, bc.height / 2 + 18);
+  } else if (paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, bc.width, bc.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 26px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('暂停', bc.width / 2, bc.height / 2);
+  }
+
+  // next piece
+  nCtx.fillStyle = '#16213e';
+  nCtx.fillRect(0, 0, nc.width, nc.height);
+  if (nextPiece) {
+    const ns = 22;
+    const ox = (nc.width  - nextPiece.shape[0].length * ns) / 2;
+    const oy = (nc.height - nextPiece.shape.length    * ns) / 2;
+    for (let r = 0; r < nextPiece.shape.length; r++) {
+      for (let c = 0; c < nextPiece.shape[r].length; c++) {
+        if (nextPiece.shape[r][c])
+          drawBlock(nCtx, ox + c * ns, oy + r * ns, nextPiece.color, false, ns);
+      }
+    }
+  }
+
+  if (running || over) requestAnimationFrame(render);
+}
+
+function updateHUD() {
+  document.getElementById('v-score').textContent = score;
+  document.getElementById('v-level').textContent  = level;
+  document.getElementById('v-lines').textContent  = linesCleared;
+  document.getElementById('v-combo').textContent  = consecutive;
+  document.getElementById('zxr-mode').className  = consecutive >= 3 ? 'on' : '';
+}
+
+// 给 .value class 补上样式（动态 id 已用 box-value class 备用）
+document.querySelectorAll('.value').forEach(el => {
+  el.style.fontSize = '1.4rem';
+  el.style.color = '#e94560';
+  el.style.fontWeight = 'bold';
+});
+
+function setStatus(txt) {
+  document.getElementById('status').textContent = txt;
+}
+
+function restartDrop() {
+  clearInterval(dropTimer);
+  dropTimer = setInterval(() => {
+    if (!paused && !over && running) { moveDown(); }
+  }, dropMs);
+}
+
+function startGame() {
+  board = newBoard();
+  score = 0; linesCleared = 0; level = 1; consecutive = 0;
+  over = false; paused = false; running = true;
+  dropMs = 1000;
+  nextPiece = randPiece();
+  spawnCurrent();
+  updateHUD();
+  setStatus('游戏中');
+  restartDrop();
+  requestAnimationFrame(render);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (!running || over) { startGame(); return; }
+    if (!paused) hardDrop();
+    return;
+  }
+  if (!running || over || paused) return;
+  switch (e.code) {
+    case 'ArrowLeft':  e.preventDefault(); if (!collides(-1, 0)) current.x--; break;
+    case 'ArrowRight': e.preventDefault(); if (!collides(1, 0))  current.x++; break;
+    case 'ArrowDown':  e.preventDefault(); moveDown(); break;
+    case 'ArrowUp':    e.preventDefault(); tryRotate(); break;
+    case 'KeyP':
+      paused = !paused;
+      setStatus(paused ? '已暂停' : '游戏中');
+      if (!paused) requestAnimationFrame(render);
+      break;
+  }
+});
+
+// initial static render
+board = newBoard(); score = 0; linesCleared = 0; level = 1; consecutive = 0;
+over = false; paused = false; running = false;
+nextPiece = randPiece();
+render();
+</script>
+</body>
+</html>
