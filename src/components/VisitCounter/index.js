@@ -22,8 +22,8 @@ import styles from './index.module.css';
 //       - anon public  → 填入 SUPABASE_KEY
 //
 // ══════════════════════════════════════════════════════════════
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_KEY = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL = 'https://dwomscmghytfrddmiiab.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3b21zY21naHl0ZnJkZG1paWFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjUyMDAsImV4cCI6MjA5MjcwMTIwMH0.keRmO-gna7VfmKIMNKKlxrs2I5Kt6fv7qLDfvQbjFr0';
 // ══════════════════════════════════════════════════════════════
 
 const READY = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
