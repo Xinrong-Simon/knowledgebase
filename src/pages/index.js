@@ -3,6 +3,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import BrowserOnly from '@docusaurus/BrowserOnly';
 
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
@@ -37,6 +38,12 @@ export default function Home() {
       <HomepageHeader />
       <main>
         <HomepageFeatures />
+        <BrowserOnly>
+          {() => {
+            const VisitCounter = require('@site/src/components/VisitCounter').default;
+            return <VisitCounter />;
+          }}
+        </BrowserOnly>
       </main>
     </Layout>
   );
