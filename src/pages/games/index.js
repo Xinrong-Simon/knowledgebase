@@ -17,6 +17,13 @@ const GAMES = [
     src: '/knowledgebase/games/needle-game.html',
     emoji: '🪡',
   },
+  {
+    id: 'air-battle',
+    title: '决战海空',
+    desc: '经典飞行射击 · 三种敌机 · 每5波出现BOSS · 道具系统',
+    src: '/knowledgebase/games/air-battle.html',
+    emoji: '✈️',
+  },
 ];
 
 export default function Games() {
