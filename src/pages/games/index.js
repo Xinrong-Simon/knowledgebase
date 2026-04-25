@@ -10,6 +10,13 @@ const GAMES = [
     src: '/knowledgebase/games/tetris.html',
     emoji: '🧱',
   },
+  {
+    id: 'needle',
+    title: '见缝插针',
+    desc: '旋转的球 · 发射银针插满为止 · 碰到已有的针即结束',
+    src: '/knowledgebase/games/needle-game.html',
+    emoji: '🪡',
+  },
 ];
 
 export default function Games() {
