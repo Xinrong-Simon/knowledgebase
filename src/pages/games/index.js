@@ -4,6 +4,13 @@ import styles from './index.module.css';
 
 const GAMES = [
   {
+    id: 'go',
+    title: 'XR围棋',
+    desc: '经典围棋 · 9/13/19路三种棋盘 · 提子 · 打劫 · 领地计分',
+    src: '/knowledgebase/games/go-game.html',
+    emoji: '⚫',
+  },
+  {
     id: 'tetris',
     title: '俄罗斯方块',
     desc: '经典方块消除游戏 · 连续超过3块触发 ZXR 模式',
