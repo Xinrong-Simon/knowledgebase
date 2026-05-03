@@ -17,3 +17,19 @@
 俄乌冲突:
   label: 俄乌冲突
   permalink: /russia-ukraine
+
+德国:
+  label: 德国
+  permalink: /germany
+
+极右翼:
+  label: 极右翼
+  permalink: /far-right
+
+AfD:
+  label: AfD
+  permalink: /afd
+
+民粹主义:
+  label: 民粹主义
+  permalink: /populism

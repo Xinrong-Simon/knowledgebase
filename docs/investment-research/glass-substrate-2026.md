@@ -1,6 +1,15 @@
 ---
-sidebar_label: '玻璃基板专题 2026'
+title: 玻璃基板——重塑半导体封装的底层革命
+sidebar_label: 玻璃基板专题 2026
 sidebar_position: 3
+description: 进入2026年，玻璃基板已从实验室验证阶段全面迈向小批量商业化元年。本文系统梳理其技术优势、全球产业链进展、TGV核心工艺突破及未来市场展望。
+tags:
+  - 半导体
+  - 先进封装
+  - 玻璃基板
+  - TGV
+  - AI芯片
+  - 2026
 ---
 
 # 专题：玻璃基板（Glass Substrate）——重塑半导体封装的底层革命
@@ -40,7 +49,13 @@ sidebar_position: 3
 
 ### 市场规模预测
 
-据调研机构预测，玻璃基板市场将从2026年的商用起点快速攀升。到2030年，其市场规模预计将达到 **70亿—80亿美元**，主要增量源于数据中心、AI加速器及6G通信。
+据调研机构预测，玻璃基板市场将从2026年的商用起点快速攀升：
+
+| 年份 | 预计市场规模 | 主要驱动力 |
+|------|------------|----------|
+| 2026 | 商用元年（小批量） | HPC、AI 加速器 |
+| 2028 | 快速成长期 | 数据中心扩张 |
+| 2030 | **70亿–80亿美元** | 数据中心、AI 加速器、6G 通信 |
 
 ### 对现有格局的冲击
 
@@ -50,6 +65,6 @@ sidebar_position: 3
 
 ## 五、延伸阅读与相关词条
 
-- [TGV 技术详情](/docs/investment-research/glass-substrate-2026)
-- [Chiplet 芯粒架构](/docs/investment-research/glass-substrate-2026)
-- [先进封装与摩尔定律 2.0](/docs/investment-research/glass-substrate-2026)
+- TGV（Through Glass Via）技术详情
+- Chiplet 芯粒架构
+- 先进封装与摩尔定律 2.0
