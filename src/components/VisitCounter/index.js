@@ -51,7 +51,7 @@ export default function VisitCounter() {
     setBusy(true);
     try {
       const r = await supa(
-        `visits?select=ip,page,created_at&order=created_at.desc&limit=${PER_PAGE}&offset=${p * PER_PAGE}`,
+        `visits?select=*&order=created_at.desc&limit=${PER_PAGE}&offset=${p * PER_PAGE}`,
         { headers: { Prefer: 'count=exact' } }
       );
       const data = await r.json();
