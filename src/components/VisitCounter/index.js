@@ -1,30 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import styles from './index.module.css';
 
-// ══════════════════════════════════════════════════════════════
-//  Supabase 配置 —— 请替换为你自己的值
-//  设置步骤见下方注释
-// ══════════════════════════════════════════════════════════════
-//
-//  1. 访问 https://supabase.com 注册免费账号
-//  2. 新建项目（任意名称），等待初始化完成
-//  3. 进入左侧 "SQL Editor"，粘贴并执行：
-//
-//     CREATE TABLE visits (
-//       id         BIGSERIAL PRIMARY KEY,
-//       ip         TEXT,
-//       created_at TIMESTAMPTZ DEFAULT NOW()
-//     );
-//     ALTER TABLE visits DISABLE ROW LEVEL SECURITY;
-//
-//  4. 进入 Settings → API，复制：
-//       - Project URL  → 填入 SUPABASE_URL
-//       - anon public  → 填入 SUPABASE_KEY
-//
-// ══════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://dwomscmghytfrddmiiab.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3b21zY21naHl0ZnJkZG1paWFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjUyMDAsImV4cCI6MjA5MjcwMTIwMH0.keRmO-gna7VfmKIMNKKlxrs2I5Kt6fv7qLDfvQbjFr0';
-// ══════════════════════════════════════════════════════════════
 
 const READY = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 const PER_PAGE = 10;
@@ -41,6 +19,7 @@ function supa(path, opts = {}) {
   });
 }
 
+// 仅展示计数和 IP 记录，追踪逻辑已移至 src/theme/Root.js
 export default function VisitCounter() {
   const [count, setCount] = useState(null);
   const [open, setOpen] = useState(false);
@@ -54,17 +33,6 @@ export default function VisitCounter() {
     if (!READY) return;
     (async () => {
       try {
-        // 同一 session 只记录一次
-        if (!sessionStorage.getItem('zxr_v')) {
-          const { ip } = await fetch('https://api.ipify.org?format=json').then(r => r.json());
-          await supa('visits', {
-            method: 'POST',
-            headers: { Prefer: 'return=minimal' },
-            body: JSON.stringify({ ip }),
-          });
-          sessionStorage.setItem('zxr_v', '1');
-        }
-        // 查询总数
         const r = await supa('visits', {
           method: 'HEAD',
           headers: { Prefer: 'count=exact' },
@@ -73,7 +41,7 @@ export default function VisitCounter() {
         const n = cr ? parseInt(cr.split('/')[1], 10) : null;
         setCount(n);
         setTotal(n ?? 0);
-      } catch (e) {
+      } catch {
         setErr('计数器暂时不可用');
       }
     })();
@@ -83,7 +51,7 @@ export default function VisitCounter() {
     setBusy(true);
     try {
       const r = await supa(
-        `visits?select=ip,created_at&order=created_at.desc&limit=${PER_PAGE}&offset=${p * PER_PAGE}`,
+        `visits?select=ip,page,created_at&order=created_at.desc&limit=${PER_PAGE}&offset=${p * PER_PAGE}`,
         { headers: { Prefer: 'count=exact' } }
       );
       const data = await r.json();
@@ -110,7 +78,7 @@ export default function VisitCounter() {
     return (
       <div className={styles.wrap}>
         <span className={styles.uncfg}>
-          ℹ️ 访问计数器未配置 — 请在 <code>src/components/VisitCounter/index.js</code> 填入 Supabase 配置
+          ℹ️ 访问计数器未配置
         </span>
       </div>
     );
@@ -118,22 +86,20 @@ export default function VisitCounter() {
 
   return (
     <div className={styles.wrap}>
-      {/* 计数行 */}
       <div className={styles.bar}>
         <span className={styles.icon}>👁</span>
         <span className={styles.label}>累计访问</span>
         <span className={styles.num}>{err ? '—' : (count ?? '…')}</span>
         <span className={styles.label}>次</span>
         <button className={styles.ipBtn} onClick={toggle}>
-          {open ? '▲ 收起' : '📋 IP 记录'}
+          {open ? '▲ 收起' : '📋 访问记录'}
         </button>
       </div>
 
-      {/* IP 记录面板 */}
       {open && (
         <div className={styles.panel}>
           <div className={styles.phead}>
-            <strong>访客 IP 记录</strong>
+            <strong>访客记录（全站）</strong>
             <span className={styles.pageInfo}>
               第 {page + 1} / {totalPages} 页 &nbsp;·&nbsp; 共 {total} 条
             </span>
@@ -147,6 +113,7 @@ export default function VisitCounter() {
                 <tr>
                   <th>序号</th>
                   <th>IP 地址</th>
+                  <th>页面</th>
                   <th>访问时间（北京时间）</th>
                 </tr>
               </thead>
@@ -155,6 +122,7 @@ export default function VisitCounter() {
                   <tr key={i}>
                     <td className={styles.seq}>{page * PER_PAGE + i + 1}</td>
                     <td><code className={styles.ip}>{v.ip}</code></td>
+                    <td className={styles.pg}>{v.page || '/'}</td>
                     <td className={styles.ts}>
                       {new Date(v.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                     </td>
@@ -162,7 +130,7 @@ export default function VisitCounter() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={3} className={styles.empty}>暂无访问记录</td>
+                    <td colSpan={4} className={styles.empty}>暂无访问记录</td>
                   </tr>
                 )}
               </tbody>
@@ -174,17 +142,13 @@ export default function VisitCounter() {
               className={styles.pageBtn}
               disabled={page === 0 || busy}
               onClick={() => loadPage(page - 1)}
-            >
-              ← 上一页
-            </button>
+            >← 上一页</button>
             <span className={styles.pageNum}>{page + 1} / {totalPages}</span>
             <button
               className={styles.pageBtn}
               disabled={page >= totalPages - 1 || busy}
               onClick={() => loadPage(page + 1)}
-            >
-              下一页 →
-            </button>
+            >下一页 →</button>
           </div>
         </div>
       )}
