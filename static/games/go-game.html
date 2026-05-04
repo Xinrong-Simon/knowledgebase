@@ -524,88 +524,127 @@ async function kataThink(){
   }
 }
 
-function evaluateMove(x,y,aiClr){
-  const opp=aiClr===BLACK?WHITE:BLACK;
-  let score=0;
+/* ══════════ MCTS Engine ══════════ */
 
-  // Simulate move
-  const tb=clone(board);
-  tb[y][x]=aiClr;
-  let totalCap=0;
-  for(const[nx,ny]of nbrs(x,y)){
-    if(tb[ny][nx]===opp){
-      const g=getGroup(tb,nx,ny);
-      if(g.libs===0){
-        totalCap+=g.stones.length;
-        for(const[sx,sy]of g.stones)tb[sy][sx]=EMPTY;
-      }
+const MCTS_C=1.41;
+
+function _nb(p,n){
+  const r=[],x=p%n,y=(p/n)|0;
+  if(x>0)r.push(p-1);if(x<n-1)r.push(p+1);
+  if(y>0)r.push(p-n);if(y<n-1)r.push(p+n);
+  return r;
+}
+
+function _grp(brd,p,n){
+  const c=brd[p];if(c===EMPTY)return{st:[],lib:0};
+  const st=[],lb=new Set(),vs=new Set(),q=[p];
+  while(q.length){
+    const v=q.pop();if(vs.has(v))continue;vs.add(v);
+    if(brd[v]!==c)continue;st.push(v);
+    for(const nb of _nb(v,n)){if(brd[nb]===EMPTY)lb.add(nb);else if(brd[nb]===c)q.push(nb);}
+  }
+  return{st,lib:lb.size};
+}
+
+function _play(brd,p,col,prev,n){
+  const opp=col===BLACK?WHITE:BLACK,nb=new Uint8Array(brd);
+  nb[p]=col;let cap=0;
+  for(const x of _nb(p,n)){if(nb[x]===opp){const g=_grp(nb,x,n);if(g.lib===0)for(const s of g.st){nb[s]=EMPTY;cap++;}}}
+  if(_grp(nb,p,n).lib===0)return null;
+  const ns=nb.join('');if(ns===prev)return null;
+  return{brd:nb,bstr:ns,cap};
+}
+
+function _playR(brd,p,col,n){
+  const opp=col===BLACK?WHITE:BLACK,nb=new Uint8Array(brd);
+  nb[p]=col;let cap=0;
+  for(const x of _nb(p,n)){if(nb[x]===opp){const g=_grp(nb,x,n);if(g.lib===0)for(const s of g.st){nb[s]=EMPTY;cap++;}}}
+  if(_grp(nb,p,n).lib===0)return null;
+  return{brd:nb,cap};
+}
+
+function _validMoves(brd,col,prev,n){
+  const mv=[];
+  for(let p=0;p<n*n;p++)if(brd[p]===EMPTY&&_play(brd,p,col,prev,n))mv.push(p);
+  return mv;
+}
+
+function _shuffle(a){
+  for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+function _rollout(brd0,col0,cb0,cw0,aiCol,n){
+  let brd=new Uint8Array(brd0),col=col0,cb=cb0,cw=cw0,pass=0;
+  const maxD=Math.min(n*n*3,280),area=n*n;
+  for(let d=0;d<maxD&&pass<2;d++){
+    const s=(Math.random()*area)|0;
+    let played=false;
+    for(let i=0;i<area&&!played;i++){
+      const p=(s+i)%area;
+      if(brd[p]===EMPTY){const res=_playR(brd,p,col,n);if(res){if(col===BLACK)cb+=res.cap;else cw+=res.cap;brd=res.brd;played=true;}}
     }
+    pass=played?0:pass+1;col=col===BLACK?WHITE:BLACK;
   }
+  let bs=cb,ws=cw+KOMI;
+  for(let p=0;p<area;p++)brd[p]===BLACK?bs++:(brd[p]===WHITE&&ws++);
+  return aiCol===BLACK?(bs>ws?1:0):(ws>bs?1:0);
+}
 
-  // Captures (highest priority)
-  score+=totalCap*100;
-
-  // Save own endangered groups
-  for(const[nx,ny]of nbrs(x,y)){
-    if(board[ny][nx]===aiClr){
-      const pg=getGroup(board,nx,ny);
-      if(pg.libs<=1)score+=75;   // Critical save
-      else if(pg.libs===2)score+=18;
+class MctsNode{
+  constructor(par,brd,col,prev,cb,cw,mv){
+    this.par=par;this.brd=brd;this.col=col;this.prev=prev;
+    this.cb=cb;this.cw=cw;this.mv=mv;
+    this.v=0;this.w=0;this.ch=[];this.un=null;
+  }
+  uct(pv){return this.v===0?Infinity:this.w/this.v+MCTS_C*Math.sqrt(Math.log(pv)/this.v);}
+  sel(){
+    let nd=this;
+    while(nd.un!==null&&nd.un.length===0&&nd.ch.length>0){
+      let b=nd.ch[0],bs=-Infinity;
+      for(const c of nd.ch){const s=c.uct(nd.v);if(s>bs){bs=s;b=c;}}
+      nd=b;
     }
+    return nd;
   }
-
-  // Own liberties after move
-  const ownG=getGroup(tb,x,y);
-  score+=Math.min(ownG.libs,8)*2;
-
-  // Atari / reduce opponent liberties
-  for(const[nx,ny]of nbrs(x,y)){
-    if(tb[ny][nx]===opp){
-      const g=getGroup(tb,nx,ny);
-      if(g.libs===1)score+=28+g.stones.length*8;  // Atari
-      else if(g.libs===2)score+=8+g.stones.length*2;
+  expand(n){
+    if(this.un===null)this.un=_shuffle(_validMoves(this.brd,this.col,this.prev,n));
+    if(!this.un.length)return this;
+    let child=null;
+    while(this.un.length&&!child){
+      const p=this.un.pop();
+      const res=_play(this.brd,p,this.col,this.prev,n);
+      if(!res)continue;
+      const nc=this.col===BLACK?WHITE:BLACK;
+      let ncb=this.cb,ncw=this.cw;
+      if(this.col===BLACK)ncb+=res.cap;else ncw+=res.cap;
+      child=new MctsNode(this,res.brd,nc,this.brd.join(''),ncb,ncw,[p%n,(p/n)|0]);
+      this.ch.push(child);
     }
+    return child||this;
   }
+  backprop(win){let nd=this;while(nd){nd.v++;nd.w+=win;nd=nd.par;}}
+}
 
-  // Strategic positioning (line preference)
-  const fe=Math.min(x,N-1-x,y,N-1-y); // distance from edge
-  if(N>=13){
-    if(fe===3)score+=10;      // 4th line (influence)
-    else if(fe===2)score+=7;  // 3rd line (territory)
-    else if(fe===1)score-=4;
-    else if(fe===0)score-=14;
-  }else{
-    // 9x9: prefer 2nd-3rd line
-    if(fe===1||fe===2)score+=7;
-    else if(fe===0)score-=10;
+function runMCTS(aiCol){
+  const brd=new Uint8Array(N*N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++)brd[y*N+x]=board[y][x];
+  const prev=prevBS?prevBS.replace(/\|/g,''):null;
+  const root=new MctsNode(null,brd,aiCol,prev,capB,capW,null);
+  const budget=N<=9?1500:N<=13?1200:1000;
+  const dl=Date.now()+budget;
+  let iters=0;
+  while(Date.now()<dl){
+    const leaf=root.sel().expand(N);
+    const win=_rollout(leaf.brd,leaf.col,leaf.cb,leaf.cw,aiCol,N);
+    leaf.backprop(win);
+    iters++;
   }
-
-  // Proximity to existing stones
-  let minDist=N*2;
-  for(let ty=0;ty<N;ty++)for(let tx=0;tx<N;tx++){
-    if(board[ty][tx]!==EMPTY){
-      const d=Math.abs(tx-x)+Math.abs(ty-y);
-      if(d<minDist)minDist=d;
-    }
-  }
-  if(hist.length>0){
-    if(minDist<=2)score+=(3-minDist)*6;
-    else if(minDist>6)score-=(minDist-6)*2;
-  }
-
-  // Opening: play near or on star points
-  if(hist.length<N*2){
-    for(const[sx,sy]of starPoints()){
-      const d=Math.abs(sx-x)+Math.abs(sy-y);
-      if(d===0){score+=32;break;}
-      if(d===1){score+=12;break;}
-    }
-  }
-
-  // Randomness for variety
-  score+=(Math.random()-.5)*14;
-
-  return score;
+  console.log(`MCTS ${N}×${N}: ${iters} iters`);
+  if(!root.ch.length)return null;
+  let best=root.ch[0],bv=0;
+  for(const c of root.ch)if(c.v>bv){bv=c.v;best=c;}
+  return best.mv;
 }
 
 function scheduleAI(){
@@ -620,34 +659,17 @@ function scheduleAI(){
 
 function aiThinkHeuristic(){
   if(!aiEnabled||over){aiThinking=false;ui();return;}
-
   const aiClr=cur;
-  const moves=getAllValidMoves(aiClr);
-
-  if(!moves.length){
-    aiThinking=false;
+  const move=runMCTS(aiClr);
+  aiThinking=false;
+  if(move&&place(move[0],move[1])){
+    draw();ui();
+  }else{
     hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
     passN++;prevBS=null;lastXY=null;
     if(passN>=2){endGame();return;}
     cur=cur===BLACK?WHITE:BLACK;
     draw();ui();
-    return;
-  }
-
-  let bestScore=-Infinity,bestMove=null;
-  for(const[x,y]of moves){
-    const s=evaluateMove(x,y,aiClr);
-    if(s>bestScore){bestScore=s;bestMove=[x,y];}
-  }
-
-  aiThinking=false;
-
-  if(bestMove&&place(bestMove[0],bestMove[1])){
-    draw();ui();
-  }else{
-    for(const[x,y]of moves){
-      if(place(x,y)){draw();ui();break;}
-    }
   }
 }
 
