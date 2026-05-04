@@ -481,39 +481,40 @@ async function loadKataModel(){
   }
 }
 
-async function kataThink(){
-  if(!kataModel||over){aiThinking=false;ui();return;}
-  const aiClr=cur;
-  const{BIN,GLB}=encodeForKata19(aiClr);
-  const tBin=tf.tensor(BIN,[1,361,22],'float32');
-  const tGlb=tf.tensor(GLB,[1,19],'float32');
-  let res=null;
-  try{
-    res=await kataModel.executeAsync({
-      'swa_model/bin_inputs':tBin,
-      'swa_model/global_inputs':tGlb
-    });
-  }finally{tBin.dispose();tGlb.dispose();}
+async function kataGuidedMCTS(aiClr){
+  if(over){aiThinking=false;ui();return;}
 
-  // results[1] = policy tensor; reshape(-1) → 362 logits (361 moves + 1 pass)
-  let pArr=null;
-  try{
-    const policy=res[1];
-    const flat=await policy.reshape([-1]).array();
-    pArr=flat.length>=362?flat:null;
-  }finally{if(res)res.forEach(t=>{try{t.dispose();}catch(_){}});}
-
-  if(!pArr){aiThinking=false;aiThinkHeuristic();return;}
-
-  let best=-Infinity,bestXY=null;
-  for(let y=0;y<19;y++)for(let x=0;x<19;x++){
-    const idx=y*19+x;
-    if(canPlace(x,y,aiClr)&&pArr[idx]>best){best=pArr[idx];bestXY=[x,y];}
+  // Step 1: one NN forward pass → softmax prior probabilities (19×19 only)
+  let priors361=null;
+  if(kataModel&&N===19){
+    const{BIN,GLB}=encodeForKata19(aiClr);
+    const tBin=tf.tensor(BIN,[1,361,22],'float32');
+    const tGlb=tf.tensor(GLB,[1,19],'float32');
+    let res=null;
+    try{
+      res=await kataModel.executeAsync({
+        'swa_model/bin_inputs':tBin,
+        'swa_model/global_inputs':tGlb
+      });
+      const flat=await res[1].reshape([-1]).array();
+      if(flat.length>=361){
+        // softmax over 361 board positions → prior probabilities
+        const logits=flat.slice(0,361);
+        const maxL=Math.max(...logits);
+        const expL=logits.map(l=>Math.exp(l-maxL));
+        const sumE=expL.reduce((a,b)=>a+b,0);
+        priors361=expL.map(e=>e/sumE);
+      }
+    }catch(e){console.warn('KataGo prior failed:',e);}
+    finally{tBin.dispose();tGlb.dispose();if(res)res.forEach(t=>{try{t.dispose();}catch(_){}});}
   }
 
+  // Step 2: PUCT MCTS guided by NN priors (or pure UCT if no priors)
+  const move=runMCTS(aiClr,priors361);
   aiThinking=false;
-  if(bestXY&&place(bestXY[0],bestXY[1])){draw();ui();}
-  else{
+  if(move&&place(move[0],move[1])){
+    draw();ui();
+  }else{
     hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
     passN++;prevBS=null;lastXY=null;
     if(passN>=2){endGame();return;}
@@ -590,12 +591,17 @@ function _rollout(brd0,col0,cb0,cw0,aiCol,n){
 }
 
 class MctsNode{
-  constructor(par,brd,col,prev,cb,cw,mv){
+  constructor(par,brd,col,prev,cb,cw,mv,prior){
     this.par=par;this.brd=brd;this.col=col;this.prev=prev;
     this.cb=cb;this.cw=cw;this.mv=mv;
+    this.prior=prior||1.0;  // NN policy prior probability
     this.v=0;this.w=0;this.ch=[];this.un=null;
   }
-  uct(pv){return this.v===0?Infinity:this.w/this.v+MCTS_C*Math.sqrt(Math.log(pv)/this.v);}
+  // PUCT formula: Q + C * P * sqrt(N_parent) / (1 + N_self)
+  uct(pv){
+    if(this.v===0)return Infinity;
+    return this.w/this.v + MCTS_C*this.prior*Math.sqrt(pv)/(1+this.v);
+  }
   sel(){
     let nd=this;
     while(nd.un!==null&&nd.un.length===0&&nd.ch.length>0){
@@ -605,8 +611,17 @@ class MctsNode{
     }
     return nd;
   }
-  expand(n){
-    if(this.un===null)this.un=_shuffle(_validMoves(this.brd,this.col,this.prev,n));
+  expand(n,priors){
+    if(this.un===null){
+      const moves=_validMoves(this.brd,this.col,this.prev,n);
+      if(priors){
+        // ascending sort → pop() gives highest-prior move first
+        moves.sort((a,b)=>(priors[a]||1e-6)-(priors[b]||1e-6));
+      }else{
+        _shuffle(moves);
+      }
+      this.un=moves;
+    }
     if(!this.un.length)return this;
     let child=null;
     while(this.un.length&&!child){
@@ -616,7 +631,8 @@ class MctsNode{
       const nc=this.col===BLACK?WHITE:BLACK;
       let ncb=this.cb,ncw=this.cw;
       if(this.col===BLACK)ncb+=res.cap;else ncw+=res.cap;
-      child=new MctsNode(this,res.brd,nc,this.brd.join(''),ncb,ncw,[p%n,(p/n)|0]);
+      const prior=priors?(priors[p]||1e-6):1.0;
+      child=new MctsNode(this,res.brd,nc,this.brd.join(''),ncb,ncw,[p%n,(p/n)|0],prior);
       this.ch.push(child);
     }
     return child||this;
@@ -624,21 +640,23 @@ class MctsNode{
   backprop(win){let nd=this;while(nd){nd.v++;nd.w+=win;nd=nd.par;}}
 }
 
-function runMCTS(aiCol){
+function runMCTS(aiCol,priors361){
   const brd=new Uint8Array(N*N);
   for(let y=0;y<N;y++)for(let x=0;x<N;x++)brd[y*N+x]=board[y][x];
   const prev=prevBS?prevBS.replace(/\|/g,''):null;
-  const root=new MctsNode(null,brd,aiCol,prev,capB,capW,null);
+  const root=new MctsNode(null,brd,aiCol,prev,capB,capW,null,1.0);
   const budget=N<=9?1500:N<=13?1200:1000;
   const dl=Date.now()+budget;
   let iters=0;
   while(Date.now()<dl){
-    const leaf=root.sel().expand(N);
+    const sel=root.sel();
+    // priors only apply when expanding the root (NN evaluated current position)
+    const leaf=sel.expand(N,sel===root?priors361:null);
     const win=_rollout(leaf.brd,leaf.col,leaf.cb,leaf.cw,aiCol,N);
     leaf.backprop(win);
     iters++;
   }
-  console.log(`MCTS ${N}×${N}: ${iters} iters`);
+  console.log(`PUCT MCTS ${N}×${N}: ${iters} iters, prior=${priors361?'NN':'uniform'}`);
   if(!root.ch.length)return null;
   let best=root.ch[0],bv=0;
   for(const c of root.ch)if(c.v>bv){bv=c.v;best=c;}
@@ -649,26 +667,8 @@ function scheduleAI(){
   if(over||!aiEnabled||cur===humanColor)return;
   aiThinking=true;
   ui();
-  setTimeout(()=>requestAnimationFrame(()=>{
-    if(kataModel&&N===19)kataThink();
-    else aiThinkHeuristic();
-  }),350+Math.random()*350);
-}
-
-function aiThinkHeuristic(){
-  if(!aiEnabled||over){aiThinking=false;ui();return;}
-  const aiClr=cur;
-  const move=runMCTS(aiClr);
-  aiThinking=false;
-  if(move&&place(move[0],move[1])){
-    draw();ui();
-  }else{
-    hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
-    passN++;prevBS=null;lastXY=null;
-    if(passN>=2){endGame();return;}
-    cur=cur===BLACK?WHITE:BLACK;
-    draw();ui();
-  }
+  setTimeout(()=>requestAnimationFrame(()=>kataGuidedMCTS(cur)),
+    350+Math.random()*350);
 }
 
 /* ─── Mode & color ─── */
