@@ -65,6 +65,7 @@ button:hover{background:rgba(255,255,255,.2)}
 #overlay .win{font-size:1.05rem;font-weight:700;margin-top:2px}
 #tip{font-size:.72rem;color:#888;margin-top:6px}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4/dist/tf.min.js"></script>
 </head>
 <body>
 <h1>⚫ XR围棋 ⚪</h1>
@@ -83,6 +84,7 @@ button:hover{background:rgba(255,255,255,.2)}
   <span id="turn"><span class="dot b"></span>黑棋落子</span>
   <span>黑提&nbsp;<b id="cb">0</b></span>
   <span>白提&nbsp;<b id="cw">0</b></span>
+  <span id="kata-status" style="font-size:.72rem;color:#a0d8ef;display:none"></span>
   <span id="ai-badge">🤖 思考中…</span>
 </div>
 
@@ -122,6 +124,9 @@ let CELL,MAR,SR,CS;
 let aiEnabled=false;
 let humanColor=BLACK;
 let aiThinking=false;
+// KataGo neural network
+let kataModel=null,kataModelLoading=false,kataModelFailed=false;
+const KATA_URL='https://raw.githubusercontent.com/maksimKorzh/kata-model-js/master/model/b10c128-s1141046784-d204142634/model.json';
 
 const cv=document.getElementById('cv');
 const ctx=cv.getContext('2d');
@@ -404,6 +409,121 @@ function getAllValidMoves(color){
   return moves;
 }
 
+/* ══════════ KataGo TF.js ══════════ */
+
+function buildLibMap(brd){
+  const m=Array.from({length:N},()=>new Array(N).fill(0));
+  const vis=new Set();
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(brd[y][x]!==EMPTY&&!vis.has(x+','+y)){
+      const{stones,libs}=getGroup(brd,x,y);
+      stones.forEach(([sx,sy])=>{m[sy][sx]=libs;vis.add(sx+','+sy);});
+    }
+  }
+  return m;
+}
+
+function encodeForKata19(aiClr){
+  const BIN=new Float32Array(361*22).fill(0);
+  const GLB=new Float32Array(19).fill(0);
+  const opp=aiClr===BLACK?WHITE:BLACK;
+  const libMap=buildLibMap(board);
+  for(let y=0;y<19;y++)for(let x=0;x<19;x++){
+    const pos=y*19+x,base=pos*22,stone=board[y][x];
+    if(stone===aiClr){
+      BIN[base+0]=1;
+      const l=libMap[y][x];
+      BIN[base+(l===1?2:l===2?3:l===3?4:5)]=1;
+    }else if(stone===opp){
+      BIN[base+1]=1;
+      const l=libMap[y][x];
+      BIN[base+(l===1?6:l===2?7:l===3?8:9)]=1;
+    }else{
+      BIN[base+10]=1;
+    }
+    if(x===0||x===18||y===0||y===18)BIN[base+11]=1;
+  }
+  if(lastXY){const[lx,ly]=lastXY;BIN[(ly*19+lx)*22+12]=1;}
+  if(hist.length>0&&hist[hist.length-1].lastXY){
+    const[lx,ly]=hist[hist.length-1].lastXY;BIN[(ly*19+lx)*22+13]=1;
+  }
+  GLB[0]=KOMI/15;
+  GLB[1]=hist.length/361;
+  GLB[5]=aiClr===WHITE?1:0;
+  return{BIN,GLB};
+}
+
+function updateKataStatus(s){
+  const el=document.getElementById('kata-status');
+  if(!el)return;
+  if(s==='loading'){el.textContent='🧠 模型加载中…';el.style.display='inline';}
+  else if(s==='ready'){el.textContent='🧠 KataGo';el.style.display='inline';}
+  else if(s==='failed'){el.textContent='🧠 启发式AI';el.style.display='inline';}
+  else{el.style.display='none';}
+}
+
+async function loadKataModel(){
+  if(kataModel||kataModelLoading||kataModelFailed)return;
+  kataModelLoading=true;
+  updateKataStatus('loading');
+  try{
+    await tf.setBackend('cpu');
+    await tf.ready();
+    kataModel=await tf.loadGraphModel(KATA_URL);
+    kataModelLoading=false;
+    updateKataStatus('ready');
+  }catch(e){
+    console.warn('KataGo load failed:',e);
+    kataModel=null;kataModelLoading=false;kataModelFailed=true;
+    updateKataStatus('failed');
+  }
+}
+
+async function kataThink(){
+  if(!kataModel||over){aiThinking=false;ui();return;}
+  const aiClr=cur;
+  const{BIN,GLB}=encodeForKata19(aiClr);
+  const tBin=tf.tensor(BIN,[1,361,22],'float32');
+  const tGlb=tf.tensor(GLB,[1,19],'float32');
+  let res=null;
+  try{
+    res=await kataModel.executeAsync({
+      'swa_model/bin_inputs':tBin,
+      'swa_model/global_inputs':tGlb
+    });
+  }finally{tBin.dispose();tGlb.dispose();}
+
+  let pArr=null;
+  try{
+    for(const t of res){
+      const sh=t.shape;
+      if(sh.length===3&&sh[2]===362){
+        pArr=await t.slice([0,1,0],[1,1,362]).reshape([362]).array();break;
+      }else if(sh.length===2&&sh[1]===362){
+        pArr=await t.reshape([362]).array();break;
+      }
+    }
+  }finally{if(res)res.forEach(t=>{try{t.dispose();}catch(_){}});}
+
+  if(!pArr){aiThinking=false;aiThinkHeuristic();return;}
+
+  let best=-Infinity,bestXY=null;
+  for(let y=0;y<19;y++)for(let x=0;x<19;x++){
+    const idx=y*19+x;
+    if(canPlace(x,y,aiClr)&&pArr[idx]>best){best=pArr[idx];bestXY=[x,y];}
+  }
+
+  aiThinking=false;
+  if(bestXY&&place(bestXY[0],bestXY[1])){draw();ui();}
+  else{
+    hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
+    passN++;prevBS=null;lastXY=null;
+    if(passN>=2){endGame();return;}
+    cur=cur===BLACK?WHITE:BLACK;
+    draw();ui();
+  }
+}
+
 function evaluateMove(x,y,aiClr){
   const opp=aiClr===BLACK?WHITE:BLACK;
   let score=0;
@@ -492,18 +612,19 @@ function scheduleAI(){
   if(over||!aiEnabled||cur===humanColor)return;
   aiThinking=true;
   ui();
-  // Small delay so UI updates before computation
-  setTimeout(()=>requestAnimationFrame(aiThink),350+Math.random()*350);
+  setTimeout(()=>requestAnimationFrame(()=>{
+    if(kataModel&&N===19)kataThink();
+    else aiThinkHeuristic();
+  }),350+Math.random()*350);
 }
 
-function aiThink(){
+function aiThinkHeuristic(){
   if(!aiEnabled||over){aiThinking=false;ui();return;}
 
   const aiClr=cur;
   const moves=getAllValidMoves(aiClr);
 
   if(!moves.length){
-    // No valid moves → pass
     aiThinking=false;
     hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
     passN++;prevBS=null;lastXY=null;
@@ -513,7 +634,6 @@ function aiThink(){
     return;
   }
 
-  // Score all moves and pick best
   let bestScore=-Infinity,bestMove=null;
   for(const[x,y]of moves){
     const s=evaluateMove(x,y,aiClr);
@@ -525,7 +645,6 @@ function aiThink(){
   if(bestMove&&place(bestMove[0],bestMove[1])){
     draw();ui();
   }else{
-    // Fallback: first valid move
     for(const[x,y]of moves){
       if(place(x,y)){draw();ui();break;}
     }
@@ -539,6 +658,12 @@ function setMode(ai){
   document.getElementById('btn-pvp').className='mdbtn'+(ai?'':' on');
   document.getElementById('btn-pva').className='mdbtn'+(ai?' on':'');
   document.getElementById('clr-row').style.display=ai?'inline-flex':'none';
+  if(ai){
+    if(!kataModel&&!kataModelLoading&&!kataModelFailed)loadKataModel();
+    else updateKataStatus(kataModelLoading?'loading':kataModel?'ready':'failed');
+  }else{
+    updateKataStatus('hide');
+  }
   newGame(currentN);
 }
 
