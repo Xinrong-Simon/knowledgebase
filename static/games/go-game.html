@@ -430,26 +430,28 @@ function encodeForKata19(aiClr){
   const libMap=buildLibMap(board);
   for(let y=0;y<19;y++)for(let x=0;x<19;x++){
     const pos=y*19+x,base=pos*22,stone=board[y][x];
-    if(stone===aiClr){
-      BIN[base+0]=1;
+    BIN[base+0]=1;                    // ch0: always 1 (valid position)
+    if(stone===aiClr) BIN[base+1]=1; // ch1: AI stones
+    if(stone===opp)   BIN[base+2]=1; // ch2: opponent stones
+    if(stone!==EMPTY){                // ch3/4/5: liberty count (1/2/3) for any stone
       const l=libMap[y][x];
-      BIN[base+(l===1?2:l===2?3:l===3?4:5)]=1;
-    }else if(stone===opp){
-      BIN[base+1]=1;
-      const l=libMap[y][x];
-      BIN[base+(l===1?6:l===2?7:l===3?8:9)]=1;
-    }else{
-      BIN[base+10]=1;
+      if(l===1)BIN[base+3]=1;
+      else if(l===2)BIN[base+4]=1;
+      else if(l===3)BIN[base+5]=1;
     }
-    if(x===0||x===18||y===0||y===18)BIN[base+11]=1;
   }
-  if(lastXY){const[lx,ly]=lastXY;BIN[(ly*19+lx)*22+12]=1;}
-  if(hist.length>0&&hist[hist.length-1].lastXY){
-    const[lx,ly]=hist[hist.length-1].lastXY;BIN[(ly*19+lx)*22+13]=1;
+  // ch9-13: last 5 moves (most recent first, any player)
+  const recent=[];
+  if(lastXY)recent.push(lastXY);
+  for(let i=hist.length-1;i>=0&&recent.length<5;i--){
+    if(hist[i].lastXY)recent.push(hist[i].lastXY);
   }
-  GLB[0]=KOMI/15;
-  GLB[1]=hist.length/361;
-  GLB[5]=aiClr===WHITE?1:0;
+  for(let i=0;i<recent.length;i++){
+    const[lx,ly]=recent[i];
+    BIN[(ly*19+lx)*22+9+i]=1;
+  }
+  // GLB[5]: komi from AI's perspective (matches kata-model-js training)
+  GLB[5]=(aiClr===WHITE?(KOMI+1):-KOMI)/20;
   return{BIN,GLB};
 }
 
@@ -493,16 +495,12 @@ async function kataThink(){
     });
   }finally{tBin.dispose();tGlb.dispose();}
 
+  // results[1] = policy tensor; reshape(-1) → 362 logits (361 moves + 1 pass)
   let pArr=null;
   try{
-    for(const t of res){
-      const sh=t.shape;
-      if(sh.length===3&&sh[2]===362){
-        pArr=await t.slice([0,1,0],[1,1,362]).reshape([362]).array();break;
-      }else if(sh.length===2&&sh[1]===362){
-        pArr=await t.reshape([362]).array();break;
-      }
-    }
+    const policy=res[1];
+    const flat=await policy.reshape([-1]).array();
+    pArr=flat.length>=362?flat:null;
   }finally{if(res)res.forEach(t=>{try{t.dispose();}catch(_){}});}
 
   if(!pArr){aiThinking=false;aiThinkHeuristic();return;}
