@@ -4,6 +4,13 @@ import styles from './index.module.css';
 
 const GAMES = [
   {
+    id: 'chess',
+    title: 'XR象棋',
+    desc: '中国象棋 · 完整棋规 · 人机对弈 · 双人对战 · 飞将 · 长将判负',
+    src: '/knowledgebase/games/chess-game.html',
+    emoji: '♟',
+  },
+  {
     id: 'go',
     title: 'XR围棋',
     desc: '经典围棋 · 双人对弈 / 人机对弈 · 9/13/19路 · 提子 · 打劫 · 领地计分',
