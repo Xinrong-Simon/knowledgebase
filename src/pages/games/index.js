@@ -6,7 +6,7 @@ const GAMES = [
   {
     id: 'go',
     title: 'XR围棋',
-    desc: '经典围棋 · 9/13/19路三种棋盘 · 提子 · 打劫 · 领地计分',
+    desc: '经典围棋 · 双人对弈 / 人机对弈 · 9/13/19路 · 提子 · 打劫 · 领地计分',
     src: '/knowledgebase/games/go-game.html',
     emoji: '⚫',
   },
