@@ -19,7 +19,7 @@ function supa(path, opts = {}) {
   });
 }
 
-// 仅展示计数和 IP 记录，追踪逻辑已移至 src/theme/Root.js
+// 仅展示计数和 IP 记录，追踪逻辑在 src/clientModules/routeTracker.js
 export default function VisitCounter() {
   const [count, setCount] = useState(null);
   const [open, setOpen] = useState(false);

@@ -18,12 +18,26 @@ async function trackPageView(pathname) {
   if (sessionStorage.getItem(key)) return;
   try {
     const { ip } = await fetch('https://api.ipify.org?format=json').then(r => r.json());
-    await supa('visits', {
+
+    // 优先带 page 字段插入（需 Supabase 表有 page 列）
+    let res = await supa('visits', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({ ip, page: pathname }),
     });
-    sessionStorage.setItem(key, '1');
+
+    // 若 page 列不存在（HTTP 4xx），降级为只插 ip
+    if (!res.ok) {
+      res = await supa('visits', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ ip }),
+      });
+    }
+
+    if (res.ok) {
+      sessionStorage.setItem(key, '1');
+    }
   } catch {}
 }
 
