@@ -1,25 +1,24 @@
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: '湖边闲客',
+    imgPath: 'img/zxr.jpg',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        湖边闲客是个人微信的昵称，具体的信息请参考微信主页
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
+    title: '随笔短文',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        这里记录了日常生活的点点滴滴，是个人生活的回忆
       </>
     ),
   },
@@ -35,11 +34,14 @@ const FeatureList = [
   },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({Svg, imgPath, title, description}) {
+  const imgSrc = useBaseUrl(imgPath);
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        {imgPath
+          ? <img src={imgSrc} className={styles.featureSvg} role="img" alt={title} />
+          : <Svg className={styles.featureSvg} role="img" />}
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>
