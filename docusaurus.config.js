@@ -28,7 +28,9 @@ const config = {
 
   onBrokenLinks: 'throw',
 
-  clientModules: ['./src/clientModules/routeTracker.js'],
+  scripts: [
+    { src: '/knowledgebase/js/tracker.js', async: true },
+  ],
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
