@@ -10,8 +10,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'ZXR知识库',
-  tagline: '个人知识库 · 记录所思所学',
+  title: 'ZXR学习作坊',
+  tagline: '个人的学习工作坊 · 记录所思所学',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -101,9 +101,9 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
-        title: 'ZXR知识库',
+        title: 'ZXR学习作坊',
         logo: {
-          alt: 'ZXR知识库 Logo',
+          alt: 'ZXR学习作坊 Logo',
           src: 'img/logo.svg',
         },
         items: [
