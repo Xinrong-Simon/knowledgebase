@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkknowledgebase=self.webpackChunkknowledgebase||[]).push([["8104"],{1466(e){e.exports=JSON.parse('{"blogBasePath":"/knowledgebase/current-affairs","blogTitle":"Blog","authorsListPath":"/knowledgebase/current-affairs/authors"}')}}]);

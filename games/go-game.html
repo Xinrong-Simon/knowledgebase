@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=500,initial-scale=1">
+<title>XR围棋</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#1a1a2e;color:#eee;
+  font-family:'Segoe UI',Arial,sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  padding:14px 0 12px;user-select:none;-webkit-user-select:none;
+}
+h1{font-size:1.32rem;font-weight:700;color:#f0c060;letter-spacing:5px;margin-bottom:8px}
+#mode-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.mdbtn{
+  background:rgba(255,255,255,.1);color:#ddd;
+  border:1px solid rgba(255,255,255,.22);padding:5px 14px;
+  border-radius:20px;font-size:.78rem;cursor:pointer;
+  transition:background .15s;font-family:inherit;
+}
+.mdbtn:hover{background:rgba(255,255,255,.2)}
+.mdbtn.on{background:rgba(240,192,96,.25);border-color:#f0c060;color:#f0c060}
+#clr-row{display:none;align-items:center;gap:4px;margin-left:4px}
+#clr-row > span{font-size:.72rem;color:#aaa;margin-right:2px}
+#info{
+  display:flex;align-items:center;gap:16px;font-size:.82rem;
+  background:rgba(255,255,255,.07);padding:5px 16px;
+  border-radius:20px;margin-bottom:8px;height:32px;
+}
+.dot{
+  display:inline-block;width:13px;height:13px;border-radius:50%;
+  border:1.5px solid #888;vertical-align:middle;margin-right:3px;flex-shrink:0;
+}
+.dot.b{background:#111}.dot.w{background:#eee}
+#ai-badge{
+  font-size:.78rem;color:#f0c060;display:none;
+  animation:pulse 1s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+#canvas-wrap{position:relative;cursor:crosshair}
+canvas{display:block}
+#btns,#szrow{display:flex;gap:8px;margin-top:10px}
+button{
+  background:rgba(255,255,255,.1);color:#ddd;
+  border:1px solid rgba(255,255,255,.22);padding:6px 15px;
+  border-radius:20px;font-size:.8rem;cursor:pointer;
+  transition:background .15s;font-family:inherit;
+}
+button:hover{background:rgba(255,255,255,.2)}
+.primary{background:#f0c060;color:#111;border-color:#f0c060;font-weight:700}
+.primary:hover{background:#ffd070}
+.sz{padding:4px 12px;font-size:.75rem}
+.sz.on{background:rgba(240,192,96,.25);border-color:#f0c060;color:#f0c060}
+#overlay{
+  display:none;position:absolute;inset:0;
+  background:rgba(8,8,20,.9);border-radius:4px;
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;text-align:center;padding:24px;
+}
+#overlay.show{display:flex}
+#overlay h2{font-size:1.2rem;color:#f0c060}
+#overlay .sc{font-size:.86rem;line-height:2.1;color:#ccc}
+#overlay .win{font-size:1.05rem;font-weight:700;margin-top:2px}
+#tip{font-size:.72rem;color:#888;margin-top:6px}
+#est-txt{font-size:.75rem;color:#ffd080;display:none}
+#btn-est.on{background:rgba(240,192,96,.25);border-color:#f0c060;color:#f0c060}
+#end-confirm{
+  display:none;position:absolute;inset:0;z-index:6;
+  background:rgba(8,8,20,.9);border-radius:4px;
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;text-align:center;padding:28px;
+}
+#end-confirm.show{display:flex}
+#end-confirm h3{font-size:1rem;color:#f0c060;font-weight:700}
+#end-confirm p{font-size:.78rem;color:#aaa;line-height:1.7}
+#end-confirm .ebtns{display:flex;gap:10px;margin-top:4px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4/dist/tf.min.js"></script>
+</head>
+<body>
+<h1>⚫ XR围棋 ⚪</h1>
+
+<div id="mode-row">
+  <button id="btn-pvp" class="mdbtn on" onclick="setMode(false)">双人对弈</button>
+  <button id="btn-pva" class="mdbtn" onclick="setMode(true)">人机对弈</button>
+  <span id="clr-row">
+    <span>执棋：</span>
+    <button id="btn-blk" class="sz on" onclick="setHumanClr(1)">执黑</button>
+    <button id="btn-wht" class="sz" onclick="setHumanClr(2)">执白</button>
+  </span>
+</div>
+
+<div id="info">
+  <span id="turn"><span class="dot b"></span>黑棋落子</span>
+  <span>黑提&nbsp;<b id="cb">0</b></span>
+  <span>白提&nbsp;<b id="cw">0</b></span>
+  <span id="kata-status" style="font-size:.72rem;color:#a0d8ef;display:none"></span>
+  <span id="ai-badge">🤖 思考中…</span>
+  <span id="est-txt"></span>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="cv"></canvas>
+  <div id="end-confirm">
+    <h3>结束当前对局？</h3>
+    <p>请双方确认棋盘上已无死棋争议<br>系统将计算领地并判定最终胜负</p>
+    <div class="ebtns">
+      <button class="primary" onclick="doEndConfirm()">确认结束</button>
+      <button onclick="doEndCancel()">继续对局</button>
+    </div>
+  </div>
+  <div id="overlay">
+    <h2>对局结束</h2>
+    <div class="sc" id="sc"></div>
+    <div class="win" id="win"></div>
+    <button class="primary" style="margin-top:10px" onclick="newGame(currentN)">再来一局</button>
+  </div>
+</div>
+
+<div id="btns">
+  <button onclick="doPass()">虚手 Pass</button>
+  <button onclick="doUndo()">悔棋 Undo</button>
+  <button onclick="doResign()">认负 Resign</button>
+  <button id="btn-est" onclick="doEstimate()">形势</button>
+  <button onclick="doEndRequest()">结束</button>
+  <button class="primary" onclick="newGame(currentN)">新局</button>
+</div>
+<div id="szrow">
+  <button class="sz" id="b9"  onclick="newGame(9)">9×9</button>
+  <button class="sz" id="b13" onclick="newGame(13)">13×13</button>
+  <button class="sz on" id="b19" onclick="newGame(19)">19×19</button>
+</div>
+<div id="tip">双方连续虚手后自动计算领地 · 贴目 6.5</div>
+
+<script>
+'use strict';
+const EMPTY=0,BLACK=1,WHITE=2,KOMI=6.5;
+const COLS='ABCDEFGHJKLMNOPQRST';
+
+let N,board,prevBS,cur,capB,capW,lastXY,passN,over,hist,cachedTerr;
+let currentN=19;
+let CELL,MAR,SR,CS;
+let showEstimate=false,estimateTerr=null;
+
+// AI state
+let aiEnabled=false;
+let humanColor=BLACK;
+let aiThinking=false;
+// KataGo neural network
+let kataModel=null,kataModelLoading=false,kataModelFailed=false;
+const KATA_URL='https://raw.githubusercontent.com/maksimKorzh/kata-model-js/master/model/b10c128-s1141046784-d204142634/model.json';
+
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+
+/* ─── Init ─── */
+function newGame(n){
+  if(aiThinking)return;
+  currentN=N=n;
+  board=Array.from({length:N},()=>new Array(N).fill(EMPTY));
+  prevBS=null;cur=BLACK;capB=capW=0;lastXY=null;passN=0;over=false;hist=[];cachedTerr=null;
+  showEstimate=false;estimateTerr=null;
+  CS=500;MAR=Math.round(CS/(N+1.5));CELL=(CS-2*MAR)/(N-1);SR=CELL*0.46;
+  cv.width=cv.height=CS;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('end-confirm').classList.remove('show');
+  document.getElementById('btn-est').classList.remove('on');
+  document.getElementById('est-txt').style.display='none';
+  ['9','13','19'].forEach(s=>document.getElementById('b'+s).className='sz'+(n===+s?' on':''));
+  draw();ui();
+  if(aiEnabled&&humanColor===WHITE)scheduleAI();
+}
+
+/* ─── Board utils ─── */
+function nbrs(x,y){
+  const r=[];
+  if(x>0)r.push([x-1,y]);if(x<N-1)r.push([x+1,y]);
+  if(y>0)r.push([x,y-1]);if(y<N-1)r.push([x,y+1]);
+  return r;
+}
+function getGroup(brd,x,y){
+  const c=brd[y][x];
+  if(c===EMPTY)return{stones:[],libs:0};
+  const st=[],lib=new Set(),vis=new Set(),q=[[x,y]];
+  while(q.length){
+    const[cx,cy]=q.shift(),k=cx+','+cy;
+    if(vis.has(k))continue;vis.add(k);
+    if(brd[cy][cx]!==c)continue;
+    st.push([cx,cy]);
+    for(const[nx,ny]of nbrs(cx,cy)){
+      if(brd[ny][nx]===EMPTY)lib.add(nx+','+ny);
+      else if(brd[ny][nx]===c)q.push([nx,ny]);
+    }
+  }
+  return{stones:st,libs:lib.size};
+}
+const bstr=brd=>brd.map(r=>r.join('')).join('|');
+const clone=brd=>brd.map(r=>[...r]);
+
+/* ─── Place ─── */
+function place(x,y){
+  if(over||board[y][x]!==EMPTY)return false;
+  const opp=cur===BLACK?WHITE:BLACK;
+  const sb=clone(board),sp=prevBS;
+  board[y][x]=cur;
+  let cap=0;
+  for(const[nx,ny]of nbrs(x,y)){
+    if(board[ny][nx]===opp){
+      const{stones,libs}=getGroup(board,nx,ny);
+      if(libs===0){for(const[sx,sy]of stones){board[sy][sx]=EMPTY;cap++;}}
+    }
+  }
+  if(getGroup(board,x,y).libs===0){board=sb;return false;}
+  const ns=bstr(board);
+  if(ns===prevBS){board=sb;return false;}
+  hist.push({board:sb,prevBS:sp,capB,capW,lastXY,passN});
+  if(cur===BLACK)capB+=cap;else capW+=cap;
+  prevBS=bstr(sb);lastXY=[x,y];passN=0;cur=opp;
+  return true;
+}
+
+/* ─── Actions ─── */
+function doPass(){
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
+  passN++;prevBS=null;lastXY=null;
+  if(passN>=2){endGame();return;}
+  cur=cur===BLACK?WHITE:BLACK;
+  refreshEstimate();
+  draw();ui();
+  if(aiEnabled&&!over)scheduleAI();
+}
+
+function doUndo(){
+  if(over||!hist.length||aiThinking)return;
+  if(aiEnabled){
+    const undoCount=Math.min(2,hist.length);
+    for(let i=0;i<undoCount;i++){
+      const h=hist.pop();
+      board=h.board;prevBS=h.prevBS;capB=h.capB;capW=h.capW;
+      lastXY=h.lastXY;passN=h.passN;
+    }
+    // Recalculate whose turn: BLACK always moves first, hist.length = #moves made
+    cur=hist.length%2===0?BLACK:WHITE;
+  }else{
+    const h=hist.pop();
+    board=h.board;prevBS=h.prevBS;capB=h.capB;capW=h.capW;
+    lastXY=h.lastXY;passN=h.passN;
+    cur=cur===BLACK?WHITE:BLACK;
+  }
+  over=false;cachedTerr=null;
+  document.getElementById('overlay').classList.remove('show');
+  refreshEstimate();
+  draw();ui();
+  if(aiEnabled&&!over&&cur!==humanColor)scheduleAI();
+}
+
+function doResign(){
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  over=true;
+  const loser=cur===BLACK?'⚫ 黑棋':'⚪ 白棋';
+  const winner=cur===BLACK?'⚪ 白棋胜（黑棋认负）':'⚫ 黑棋胜（白棋认负）';
+  document.getElementById('sc').innerHTML=`${loser}认负`;
+  const w=document.getElementById('win');
+  w.textContent=winner;w.style.color=cur===BLACK?'#ffe':'#aef';
+  document.getElementById('overlay').classList.add('show');
+  draw();ui();
+}
+
+/* ─── Territory (Japanese rules) ─── */
+function calcTerritory(){
+  const vis=new Set();
+  const terr=Array.from({length:N},()=>new Array(N).fill(EMPTY));
+  let bT=0,wT=0;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(board[y][x]===EMPTY&&!vis.has(x+','+y)){
+      const reg=[],borders=new Set(),q=[[x,y]];
+      while(q.length){
+        const[qx,qy]=q.shift(),k=qx+','+qy;
+        if(vis.has(k))continue;vis.add(k);
+        if(board[qy][qx]!==EMPTY){borders.add(board[qy][qx]);continue;}
+        reg.push([qx,qy]);
+        for(const[nx,ny]of nbrs(qx,qy))if(!vis.has(nx+','+ny))q.push([nx,ny]);
+      }
+      if(borders.size===1){
+        const o=[...borders][0];
+        reg.forEach(([rx,ry])=>terr[ry][rx]=o);
+        if(o===BLACK)bT+=reg.length;else wT+=reg.length;
+      }
+    }
+  }
+  return{bT,wT,terr};
+}
+
+function endGame(){
+  over=true;
+  cachedTerr=calcTerritory();
+  const{bT,wT}=cachedTerr;
+  const bs=bT+capB,ws=wT+capW+KOMI;
+  draw();
+  document.getElementById('sc').innerHTML=
+    `⚫ 黑棋：${bT} 目 + ${capB} 提子 = <b>${bs}</b> 分<br>`+
+    `⚪ 白棋：${wT} 目 + ${capW} 提子 + ${KOMI} 贴目 = <b>${ws}</b> 分`;
+  const w=document.getElementById('win');
+  if(bs>ws){w.textContent=`⚫ 黑棋胜 +${(bs-ws).toFixed(1)}`;w.style.color='#aef';}
+  else{w.textContent=`⚪ 白棋胜 +${(ws-bs).toFixed(1)}`;w.style.color='#ffe';}
+  document.getElementById('overlay').classList.add('show');
+}
+
+/* ─── Drawing ─── */
+const gx=x=>MAR+x*CELL;
+const gy=y=>MAR+y*CELL;
+
+function starPoints(){
+  if(N===19)return[[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]];
+  if(N===13)return[[3,3],[3,9],[9,3],[9,9],[6,6]];
+  if(N===9) return[[2,2],[2,6],[6,2],[6,6],[4,4]];
+  return[];
+}
+
+function draw(){
+  const bg=ctx.createLinearGradient(0,0,CS,CS);
+  bg.addColorStop(0,'#d4a530');bg.addColorStop(1,'#b8880c');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,CS,CS);
+
+  ctx.save();ctx.globalAlpha=.045;ctx.strokeStyle='#000';ctx.lineWidth=1;
+  for(let i=0;i<CS;i+=7){
+    ctx.beginPath();
+    ctx.moveTo(0,i+Math.sin(i/55)*2.5);
+    ctx.lineTo(CS,i+Math.cos(i/48)*2.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle='#3a2800';ctx.lineWidth=0.75;
+  for(let i=0;i<N;i++){
+    ctx.beginPath();ctx.moveTo(gx(i),gy(0));ctx.lineTo(gx(i),gy(N-1));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(gx(0),gy(i));ctx.lineTo(gx(N-1),gy(i));ctx.stroke();
+  }
+  ctx.strokeStyle='#2a1800';ctx.lineWidth=1.8;
+  ctx.strokeRect(gx(0),gy(0),gx(N-1)-gx(0),gy(N-1)-gy(0));
+
+  ctx.fillStyle='#3a2800';
+  for(const[sx,sy]of starPoints()){
+    ctx.beginPath();ctx.arc(gx(sx),gy(sy),Math.max(2.5,CELL*.1),0,Math.PI*2);ctx.fill();
+  }
+
+  const fs=Math.max(8,Math.min(13,MAR*.52));
+  ctx.fillStyle='#6a4010';ctx.font=`${fs}px monospace`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(let i=0;i<N;i++){
+    ctx.fillText(COLS[i],gx(i),MAR/2);ctx.fillText(COLS[i],gx(i),CS-MAR/2);
+    ctx.fillText(N-i,MAR/2,gy(i));ctx.fillText(N-i,CS-MAR/2,gy(i));
+  }
+
+  if(over&&cachedTerr){
+    const{terr}=cachedTerr;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      if(terr[y][x]!==EMPTY){
+        const s=CELL*.27;
+        ctx.fillStyle=terr[y][x]===BLACK?'rgba(0,0,0,.5)':'rgba(255,255,255,.6)';
+        ctx.fillRect(gx(x)-s,gy(y)-s,s*2,s*2);
+      }
+    }
+  }
+
+  if(!over&&showEstimate&&estimateTerr){
+    const{terr}=estimateTerr;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      if(terr[y][x]!==EMPTY&&board[y][x]===EMPTY){
+        const s=CELL*.22;
+        ctx.fillStyle=terr[y][x]===BLACK?'rgba(0,0,0,.42)':'rgba(255,255,255,.52)';
+        ctx.fillRect(gx(x)-s,gy(y)-s,s*2,s*2);
+      }
+    }
+  }
+
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(board[y][x]!==EMPTY)drawStone(x,y,board[y][x]);
+  }
+
+  if(lastXY){
+    const[lx,ly]=lastXY;
+    ctx.beginPath();ctx.arc(gx(lx),gy(ly),SR*.3,0,Math.PI*2);
+    ctx.fillStyle=board[ly][lx]===BLACK?'rgba(255,255,255,.88)':'rgba(0,0,0,.78)';
+    ctx.fill();
+  }
+}
+
+function drawStone(x,y,c){
+  const px=gx(x),py=gy(y),r=SR;
+  ctx.beginPath();ctx.arc(px+r*.09,py+r*.14,r,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,.22)';ctx.fill();
+  const gr=ctx.createRadialGradient(px-r*.3,py-r*.36,r*.06,px,py,r);
+  if(c===BLACK){
+    gr.addColorStop(0,'#666');gr.addColorStop(.4,'#1c1c1c');gr.addColorStop(1,'#000');
+  }else{
+    gr.addColorStop(0,'#fff');gr.addColorStop(.5,'#e6e6e6');gr.addColorStop(1,'#bbb');
+  }
+  ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
+}
+
+function ui(){
+  const t=document.getElementById('turn');
+  if(!over){
+    const isB=cur===BLACK;
+    let label;
+    if(aiEnabled){
+      const isAI=cur!==humanColor;
+      label=isAI?(isB?'黑棋（AI）':'白棋（AI）'):(isB?'⚫ 黑棋（你）':'⚪ 白棋（你）');
+    }else{
+      label=isB?'黑棋落子':'白棋落子';
+    }
+    t.innerHTML=`<span class="dot ${isB?'b':'w'}"></span>${label}`;
+  }else{t.innerHTML='对局结束';}
+  document.getElementById('cb').textContent=capB;
+  document.getElementById('cw').textContent=capW;
+  document.getElementById('ai-badge').style.display=
+    (aiEnabled&&aiThinking)?'inline':'none';
+  cv.style.cursor=(aiThinking||over)?'default':'crosshair';
+}
+
+/* ══════════════════ AI Engine ══════════════════ */
+
+function canPlace(x,y,color){
+  if(board[y][x]!==EMPTY)return false;
+  const opp=color===BLACK?WHITE:BLACK;
+  const tb=clone(board);
+  tb[y][x]=color;
+  for(const[nx,ny]of nbrs(x,y)){
+    if(tb[ny][nx]===opp){
+      const{stones,libs}=getGroup(tb,nx,ny);
+      if(libs===0)for(const[sx,sy]of stones)tb[sy][sx]=EMPTY;
+    }
+  }
+  if(getGroup(tb,x,y).libs===0)return false;
+  if(bstr(tb)===prevBS)return false;
+  return true;
+}
+
+function getAllValidMoves(color){
+  const moves=[];
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(canPlace(x,y,color))moves.push([x,y]);
+  }
+  return moves;
+}
+
+/* ══════════ KataGo TF.js ══════════ */
+
+function buildLibMap(brd){
+  const m=Array.from({length:N},()=>new Array(N).fill(0));
+  const vis=new Set();
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(brd[y][x]!==EMPTY&&!vis.has(x+','+y)){
+      const{stones,libs}=getGroup(brd,x,y);
+      stones.forEach(([sx,sy])=>{m[sy][sx]=libs;vis.add(sx+','+sy);});
+    }
+  }
+  return m;
+}
+
+function encodeForKata19(aiClr){
+  const BIN=new Float32Array(361*22).fill(0);
+  const GLB=new Float32Array(19).fill(0);
+  const opp=aiClr===BLACK?WHITE:BLACK;
+  const libMap=buildLibMap(board);
+  for(let y=0;y<19;y++)for(let x=0;x<19;x++){
+    const pos=y*19+x,base=pos*22,stone=board[y][x];
+    BIN[base+0]=1;                    // ch0: always 1 (valid position)
+    if(stone===aiClr) BIN[base+1]=1; // ch1: AI stones
+    if(stone===opp)   BIN[base+2]=1; // ch2: opponent stones
+    if(stone!==EMPTY){                // ch3/4/5: liberty count (1/2/3) for any stone
+      const l=libMap[y][x];
+      if(l===1)BIN[base+3]=1;
+      else if(l===2)BIN[base+4]=1;
+      else if(l===3)BIN[base+5]=1;
+    }
+  }
+  // ch9-13: last 5 moves (most recent first, any player)
+  const recent=[];
+  if(lastXY)recent.push(lastXY);
+  for(let i=hist.length-1;i>=0&&recent.length<5;i--){
+    if(hist[i].lastXY)recent.push(hist[i].lastXY);
+  }
+  for(let i=0;i<recent.length;i++){
+    const[lx,ly]=recent[i];
+    BIN[(ly*19+lx)*22+9+i]=1;
+  }
+  // GLB[5]: komi from AI's perspective (matches kata-model-js training)
+  GLB[5]=(aiClr===WHITE?(KOMI+1):-KOMI)/20;
+  return{BIN,GLB};
+}
+
+function updateKataStatus(s){
+  const el=document.getElementById('kata-status');
+  if(!el)return;
+  if(s==='loading'){el.textContent='🧠 模型加载中…';el.style.display='inline';}
+  else if(s==='ready'){el.textContent='🧠 KataGo';el.style.display='inline';}
+  else if(s==='failed'){el.textContent='🧠 启发式AI';el.style.display='inline';}
+  else{el.style.display='none';}
+}
+
+async function loadKataModel(){
+  if(kataModel||kataModelLoading||kataModelFailed)return;
+  kataModelLoading=true;
+  updateKataStatus('loading');
+  try{
+    await tf.setBackend('cpu');
+    await tf.ready();
+    kataModel=await tf.loadGraphModel(KATA_URL);
+    kataModelLoading=false;
+    updateKataStatus('ready');
+  }catch(e){
+    console.warn('KataGo load failed:',e);
+    kataModel=null;kataModelLoading=false;kataModelFailed=true;
+    updateKataStatus('failed');
+  }
+}
+
+async function kataGuidedMCTS(aiClr){
+  if(over){aiThinking=false;ui();return;}
+
+  // Step 1: one NN forward pass → softmax prior probabilities (19×19 only)
+  let priors361=null;
+  if(kataModel&&N===19){
+    const{BIN,GLB}=encodeForKata19(aiClr);
+    const tBin=tf.tensor(BIN,[1,361,22],'float32');
+    const tGlb=tf.tensor(GLB,[1,19],'float32');
+    let res=null;
+    try{
+      res=await kataModel.executeAsync({
+        'swa_model/bin_inputs':tBin,
+        'swa_model/global_inputs':tGlb
+      });
+      const flat=await res[1].reshape([-1]).array();
+      if(flat.length>=361){
+        // softmax over 361 board positions → prior probabilities
+        const logits=flat.slice(0,361);
+        const maxL=Math.max(...logits);
+        const expL=logits.map(l=>Math.exp(l-maxL));
+        const sumE=expL.reduce((a,b)=>a+b,0);
+        priors361=expL.map(e=>e/sumE);
+      }
+    }catch(e){console.warn('KataGo prior failed:',e);}
+    finally{tBin.dispose();tGlb.dispose();if(res)res.forEach(t=>{try{t.dispose();}catch(_){}});}
+  }
+
+  // Step 2: PUCT MCTS guided by NN priors (or pure UCT if no priors)
+  const move=runMCTS(aiClr,priors361);
+  aiThinking=false;
+  if(move&&place(move[0],move[1])){
+    refreshEstimate();draw();ui();
+  }else{
+    hist.push({board:clone(board),prevBS,capB,capW,lastXY,passN});
+    passN++;prevBS=null;lastXY=null;
+    if(passN>=2){endGame();return;}
+    cur=cur===BLACK?WHITE:BLACK;
+    draw();ui();
+  }
+}
+
+/* ══════════ MCTS Engine ══════════ */
+
+const MCTS_C=1.41;
+
+function _nb(p,n){
+  const r=[],x=p%n,y=(p/n)|0;
+  if(x>0)r.push(p-1);if(x<n-1)r.push(p+1);
+  if(y>0)r.push(p-n);if(y<n-1)r.push(p+n);
+  return r;
+}
+
+function _grp(brd,p,n){
+  const c=brd[p];if(c===EMPTY)return{st:[],lib:0};
+  const st=[],lb=new Set(),vs=new Set(),q=[p];
+  while(q.length){
+    const v=q.pop();if(vs.has(v))continue;vs.add(v);
+    if(brd[v]!==c)continue;st.push(v);
+    for(const nb of _nb(v,n)){if(brd[nb]===EMPTY)lb.add(nb);else if(brd[nb]===c)q.push(nb);}
+  }
+  return{st,lib:lb.size};
+}
+
+function _play(brd,p,col,prev,n){
+  const opp=col===BLACK?WHITE:BLACK,nb=new Uint8Array(brd);
+  nb[p]=col;let cap=0;
+  for(const x of _nb(p,n)){if(nb[x]===opp){const g=_grp(nb,x,n);if(g.lib===0)for(const s of g.st){nb[s]=EMPTY;cap++;}}}
+  if(_grp(nb,p,n).lib===0)return null;
+  const ns=nb.join('');if(ns===prev)return null;
+  return{brd:nb,bstr:ns,cap};
+}
+
+function _playR(brd,p,col,n){
+  const opp=col===BLACK?WHITE:BLACK,nb=new Uint8Array(brd);
+  nb[p]=col;let cap=0;
+  for(const x of _nb(p,n)){if(nb[x]===opp){const g=_grp(nb,x,n);if(g.lib===0)for(const s of g.st){nb[s]=EMPTY;cap++;}}}
+  if(_grp(nb,p,n).lib===0)return null;
+  return{brd:nb,cap};
+}
+
+function _validMoves(brd,col,prev,n){
+  const mv=[];
+  for(let p=0;p<n*n;p++)if(brd[p]===EMPTY&&_play(brd,p,col,prev,n))mv.push(p);
+  return mv;
+}
+
+function _shuffle(a){
+  for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+function _rollout(brd0,col0,cb0,cw0,aiCol,n){
+  let brd=new Uint8Array(brd0),col=col0,cb=cb0,cw=cw0,pass=0;
+  const maxD=Math.min(n*n*3,280),area=n*n;
+  for(let d=0;d<maxD&&pass<2;d++){
+    const s=(Math.random()*area)|0;
+    let played=false;
+    for(let i=0;i<area&&!played;i++){
+      const p=(s+i)%area;
+      if(brd[p]===EMPTY){const res=_playR(brd,p,col,n);if(res){if(col===BLACK)cb+=res.cap;else cw+=res.cap;brd=res.brd;played=true;}}
+    }
+    pass=played?0:pass+1;col=col===BLACK?WHITE:BLACK;
+  }
+  let bs=cb,ws=cw+KOMI;
+  for(let p=0;p<area;p++)brd[p]===BLACK?bs++:(brd[p]===WHITE&&ws++);
+  return aiCol===BLACK?(bs>ws?1:0):(ws>bs?1:0);
+}
+
+class MctsNode{
+  constructor(par,brd,col,prev,cb,cw,mv,prior){
+    this.par=par;this.brd=brd;this.col=col;this.prev=prev;
+    this.cb=cb;this.cw=cw;this.mv=mv;
+    this.prior=prior||1.0;  // NN policy prior probability
+    this.v=0;this.w=0;this.ch=[];this.un=null;
+  }
+  // PUCT formula: Q + C * P * sqrt(N_parent) / (1 + N_self)
+  uct(pv){
+    if(this.v===0)return Infinity;
+    return this.w/this.v + MCTS_C*this.prior*Math.sqrt(pv)/(1+this.v);
+  }
+  sel(){
+    let nd=this;
+    while(nd.un!==null&&nd.un.length===0&&nd.ch.length>0){
+      let b=nd.ch[0],bs=-Infinity;
+      for(const c of nd.ch){const s=c.uct(nd.v);if(s>bs){bs=s;b=c;}}
+      nd=b;
+    }
+    return nd;
+  }
+  expand(n,priors){
+    if(this.un===null){
+      const moves=_validMoves(this.brd,this.col,this.prev,n);
+      if(priors){
+        // ascending sort → pop() gives highest-prior move first
+        moves.sort((a,b)=>(priors[a]||1e-6)-(priors[b]||1e-6));
+      }else{
+        _shuffle(moves);
+      }
+      this.un=moves;
+    }
+    if(!this.un.length)return this;
+    let child=null;
+    while(this.un.length&&!child){
+      const p=this.un.pop();
+      const res=_play(this.brd,p,this.col,this.prev,n);
+      if(!res)continue;
+      const nc=this.col===BLACK?WHITE:BLACK;
+      let ncb=this.cb,ncw=this.cw;
+      if(this.col===BLACK)ncb+=res.cap;else ncw+=res.cap;
+      const prior=priors?(priors[p]||1e-6):1.0;
+      child=new MctsNode(this,res.brd,nc,this.brd.join(''),ncb,ncw,[p%n,(p/n)|0],prior);
+      this.ch.push(child);
+    }
+    return child||this;
+  }
+  backprop(win){let nd=this;while(nd){nd.v++;nd.w+=win;nd=nd.par;}}
+}
+
+function runMCTS(aiCol,priors361){
+  const brd=new Uint8Array(N*N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++)brd[y*N+x]=board[y][x];
+  const prev=prevBS?prevBS.replace(/\|/g,''):null;
+  const root=new MctsNode(null,brd,aiCol,prev,capB,capW,null,1.0);
+  const budget=N<=9?1500:N<=13?1200:1000;
+  const dl=Date.now()+budget;
+  let iters=0;
+  while(Date.now()<dl){
+    const sel=root.sel();
+    // priors only apply when expanding the root (NN evaluated current position)
+    const leaf=sel.expand(N,sel===root?priors361:null);
+    const win=_rollout(leaf.brd,leaf.col,leaf.cb,leaf.cw,aiCol,N);
+    leaf.backprop(win);
+    iters++;
+  }
+  console.log(`PUCT MCTS ${N}×${N}: ${iters} iters, prior=${priors361?'NN':'uniform'}`);
+  if(!root.ch.length)return null;
+  let best=root.ch[0],bv=0;
+  for(const c of root.ch)if(c.v>bv){bv=c.v;best=c;}
+  return best.mv;
+}
+
+function scheduleAI(){
+  if(over||!aiEnabled||cur===humanColor)return;
+  aiThinking=true;
+  ui();
+  setTimeout(()=>requestAnimationFrame(()=>kataGuidedMCTS(cur)),
+    350+Math.random()*350);
+}
+
+/* ─── 形势判断 & 结束对局 ─── */
+
+function refreshEstimate(){
+  if(!showEstimate||over)return;
+  estimateTerr=calcTerritory();
+  _renderEstimateText();
+}
+
+function _renderEstimateText(){
+  if(!estimateTerr)return;
+  const{bT,wT}=estimateTerr;
+  const bs=bT+capB, ws=wT+capW+KOMI;
+  const diff=Math.abs(bs-ws).toFixed(1);
+  const el=document.getElementById('est-txt');
+  if(bs>ws){el.textContent=`估算 ⚫+${diff}`;el.style.color='#aef';}
+  else{el.textContent=`估算 ⚪+${diff}`;el.style.color='#ffe';}
+  el.style.display='inline';
+}
+
+function doEstimate(){
+  if(over)return;
+  showEstimate=!showEstimate;
+  document.getElementById('btn-est').classList.toggle('on',showEstimate);
+  if(showEstimate){
+    estimateTerr=calcTerritory();
+    _renderEstimateText();
+  }else{
+    estimateTerr=null;
+    document.getElementById('est-txt').style.display='none';
+  }
+  draw();
+}
+
+function doEndRequest(){
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  document.getElementById('end-confirm').classList.add('show');
+}
+
+function doEndConfirm(){
+  document.getElementById('end-confirm').classList.remove('show');
+  showEstimate=false;estimateTerr=null;
+  document.getElementById('btn-est').classList.remove('on');
+  document.getElementById('est-txt').style.display='none';
+  endGame();
+}
+
+function doEndCancel(){
+  document.getElementById('end-confirm').classList.remove('show');
+}
+
+/* ─── Mode & color ─── */
+function setMode(ai){
+  if(aiThinking)return;
+  aiEnabled=ai;
+  document.getElementById('btn-pvp').className='mdbtn'+(ai?'':' on');
+  document.getElementById('btn-pva').className='mdbtn'+(ai?' on':'');
+  document.getElementById('clr-row').style.display=ai?'inline-flex':'none';
+  if(ai){
+    if(!kataModel&&!kataModelLoading&&!kataModelFailed)loadKataModel();
+    else updateKataStatus(kataModelLoading?'loading':kataModel?'ready':'failed');
+  }else{
+    updateKataStatus('hide');
+  }
+  newGame(currentN);
+}
+
+function setHumanClr(c){
+  if(aiThinking)return;
+  humanColor=c;
+  document.getElementById('btn-blk').className='sz'+(c===BLACK?' on':'');
+  document.getElementById('btn-wht').className='sz'+(c===WHITE?' on':'');
+  newGame(currentN);
+}
+
+/* ─── Input ─── */
+let hover=null;
+
+function pointerToCell(e){
+  const r=cv.getBoundingClientRect();
+  const sx=cv.width/r.width,sy=cv.height/r.height;
+  let px,py;
+  if(e.touches){
+    px=(e.touches[0].clientX-r.left)*sx;
+    py=(e.touches[0].clientY-r.top)*sy;
+  }else{
+    px=(e.clientX-r.left)*sx;
+    py=(e.clientY-r.top)*sy;
+  }
+  const x=Math.round((px-MAR)/CELL),y=Math.round((py-MAR)/CELL);
+  const dx=px-(MAR+x*CELL),dy=py-(MAR+y*CELL);
+  if(x<0||x>=N||y<0||y>=N||Math.sqrt(dx*dx+dy*dy)>CELL*.55)return null;
+  return[x,y];
+}
+
+cv.addEventListener('click',e=>{
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  const p=pointerToCell(e);
+  if(!p)return;
+  if(place(p[0],p[1])){
+    hover=null;refreshEstimate();draw();ui();
+    if(aiEnabled&&!over)scheduleAI();
+  }
+});
+
+cv.addEventListener('touchend',e=>{
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  e.preventDefault();
+  const p=pointerToCell(e.changedTouches
+    ?{clientX:e.changedTouches[0].clientX,clientY:e.changedTouches[0].clientY}:e);
+  if(!p)return;
+  if(place(p[0],p[1])){
+    hover=null;refreshEstimate();draw();ui();
+    if(aiEnabled&&!over)scheduleAI();
+  }
+},{passive:false});
+
+cv.addEventListener('mousemove',e=>{
+  if(over||aiThinking)return;
+  if(aiEnabled&&cur!==humanColor)return;
+  const p=pointerToCell(e);
+  const np=p&&board[p[1]][p[0]]===EMPTY?p:null;
+  if(JSON.stringify(np)!==JSON.stringify(hover)){
+    hover=np;draw();
+    if(hover){
+      ctx.beginPath();ctx.arc(gx(hover[0]),gy(hover[1]),SR,0,Math.PI*2);
+      ctx.fillStyle=cur===BLACK?'rgba(0,0,0,.35)':'rgba(255,255,255,.45)';
+      ctx.fill();
+    }
+  }
+});
+
+cv.addEventListener('mouseleave',()=>{if(hover){hover=null;draw();}});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')doPass();
+  if(e.key==='z'&&(e.ctrlKey||e.metaKey)){e.preventDefault();doUndo();}
+});
+
+newGame(19);
+</script>
+</body>
+</html>
