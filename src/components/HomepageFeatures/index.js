@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import Link from '@docusaurus/Link';
 import Heading from '@theme/Heading';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import styles from './styles.module.css';
@@ -30,21 +31,25 @@ const FeatureList = [
         记录学习、生活与工作中的精彩瞬间
       </>
     ),
+    link: '/photos',
   },
 ];
 
-function Feature({Svg, imgPath, title, description}) {
+function Feature({Svg, imgPath, title, description, link}) {
   const imgSrc = useBaseUrl(imgPath);
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
         {imgPath
-          ? <img src={imgSrc} className={styles.featureImg} role="img" alt={title} />
+          ? <div className={styles.featureImgWrapper}>
+              <img src={imgSrc} className={styles.featureImg} role="img" alt={title} />
+            </div>
           : <Svg className={styles.featureSvg} role="img" />}
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
+        {link && <Link className="button button--secondary button--sm" to={link}>查看照片</Link>}
       </div>
     </div>
   );
