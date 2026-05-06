@@ -9,3 +9,10 @@
   height: 200px;
   width: 200px;
 }
+
+.featureImg {
+  height: 160px;
+  width: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+}

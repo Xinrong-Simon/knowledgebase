@@ -23,12 +23,11 @@ const FeatureList = [
     ),
   },
   {
-    title: 'Powered by React',
+    title: '学习、生活和工作瞬间留影',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        记录学习、生活与工作中的精彩瞬间
       </>
     ),
   },
@@ -40,7 +39,7 @@ function Feature({Svg, imgPath, title, description}) {
     <div className={clsx('col col--4')}>
       <div className="text--center">
         {imgPath
-          ? <img src={imgSrc} className={styles.featureSvg} role="img" alt={title} />
+          ? <img src={imgSrc} className={styles.featureImg} role="img" alt={title} />
           : <Svg className={styles.featureSvg} role="img" />}
       </div>
       <div className="text--center padding-horiz--md">
