@@ -38,6 +38,13 @@ const GAMES = [
     src: '/knowledgebase/games/air-battle.html',
     emoji: '✈️',
   },
+  {
+    id: 'doudizhu',
+    title: '斗地主',
+    desc: '经典斗地主 · 人机对战 · 完整牌型 · 叫地主 · 炸弹翻倍',
+    src: '/knowledgebase/games/doudizhu.html',
+    emoji: '🃏',
+  },
 ];
 
 export default function Games() {
