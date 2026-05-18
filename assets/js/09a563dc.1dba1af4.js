@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkknowledgebase=self.webpackChunkknowledgebase||[]).push([["9631"],{1497(e){e.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"\u79D1\u6280\u65B0\u95FB\u680F\u76EE\u4E0A\u7EBF","permalink":"/knowledgebase/tech-news/2026/05/18/welcome","unlisted":false,"date":"2026-05-18T00:00:00.000Z"}]}')}}]);

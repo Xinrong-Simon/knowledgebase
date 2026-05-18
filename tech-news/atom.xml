@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="atom.xsl"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://Xinrong-Simon.github.io/knowledgebase/tech-news</id>
+    <title>ZXR学习作坊 Blog</title>
+    <updated>2026-05-18T00:00:00.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://Xinrong-Simon.github.io/knowledgebase/tech-news"/>
+    <subtitle>ZXR学习作坊 Blog</subtitle>
+    <icon>https://Xinrong-Simon.github.io/knowledgebase/img/favicon.ico</icon>
+    <entry>
+        <title type="html"><![CDATA[科技新闻栏目上线]]></title>
+        <id>https://Xinrong-Simon.github.io/knowledgebase/tech-news/2026/05/18/welcome</id>
+        <link href="https://Xinrong-Simon.github.io/knowledgebase/tech-news/2026/05/18/welcome"/>
+        <updated>2026-05-18T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[科技新闻栏目正式上线，记录值得关注的科技动态与行业趋势。]]></summary>
+        <content type="html"><![CDATA[<p>科技新闻栏目正式上线，将持续记录 AI、芯片、科技政策等领域的重要动态与个人观察。</p>
+<!-- -->
+<p>欢迎来到科技新闻栏目。这里将收录值得关注的科技行业动态，包括但不限于：</p>
+<ul>
+<li class=""><strong>AI 进展</strong>：大模型、应用落地、监管政策</li>
+<li class=""><strong>芯片与算力</strong>：半导体产业、算力竞争</li>
+<li class=""><strong>科技政策</strong>：各国科技战略、数据安全立法</li>
+<li class=""><strong>互联网产业</strong>：平台经济、新兴技术趋势</li>
+</ul>]]></content>
+        <author>
+            <name>Xinrong Zhou</name>
+            <uri>https://github.com/Xinrong-Simon</uri>
+        </author>
+        <category label="AI" term="AI"/>
+    </entry>
+</feed>

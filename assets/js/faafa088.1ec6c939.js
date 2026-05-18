@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkknowledgebase=self.webpackChunkknowledgebase||[]).push([["4031"],{2511(e){e.exports=JSON.parse('{"name":"docusaurus-plugin-content-blog","id":"tech-news"}')}}]);
