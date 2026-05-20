@@ -58,6 +58,23 @@ const config = {
         onUntruncatedBlogPosts: 'warn',
       },
     ],
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'tech-news',
+        routeBasePath: 'tech-news',
+        path: './tech-news',
+        showReadingTime: true,
+        feedOptions: {
+          type: ['rss', 'atom'],
+          xslt: true,
+        },
+        editUrl: 'https://github.com/Xinrong-Simon/knowledgebase/edit/main/',
+        onInlineTags: 'warn',
+        onInlineAuthors: 'warn',
+        onUntruncatedBlogPosts: 'warn',
+      },
+    ],
   ],
 
   presets: [
@@ -114,6 +131,7 @@ const config = {
             label: '知识库',
           },
           {to: '/blog', label: '随笔', position: 'left'},
+          {to: '/tech-news', label: '科技新闻', position: 'left'},
           {to: '/current-affairs', label: '时事分析', position: 'left'},
           {to: '/games', label: '游戏', position: 'left'},
           {
@@ -141,6 +159,10 @@ const config = {
               {
                 label: '随笔',
                 to: '/blog',
+              },
+              {
+                label: '科技新闻',
+                to: '/tech-news',
               },
               {
                 label: '时事分析',

@@ -1,0 +1,19 @@
+AI:
+  label: AI
+  permalink: /ai
+
+芯片:
+  label: 芯片
+  permalink: /chip
+
+科技政策:
+  label: 科技政策
+  permalink: /tech-policy
+
+互联网:
+  label: 互联网
+  permalink: /internet
+
+量子计算:
+  label: 量子计算
+  permalink: /quantum-computing
